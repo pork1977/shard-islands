@@ -1,0 +1,11 @@
+{
+  "name": "shard-islands",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "dev:server": "pnpm --filter server dev",
+    "build": "pnpm --filter web build",
+    "lint": "pnpm --filter web lint"
+  },
+  "packageManager": "pnpm@9.12.0"
+}
