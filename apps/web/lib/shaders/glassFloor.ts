@@ -1,15 +1,18 @@
 import { shaderMaterial } from "@react-three/drei";
 import * as THREE from "three";
 
-// Frosted architectural glass, viewed dead-on: since a frontal plane can't sell
-// a real view-angle fresnel, this fakes the "heavy glass" read with a radial
-// vignette (brighter/cooler toward the edges), a slow animated noise-based
-// frost distortion, and a diagonal specular sweep for idle shimmer.
+// Frosted architectural glass, viewed dead-on. Previous version leaned on a
+// radial vignette that read as "dark hole with a blue rim" rather than glass
+// (and implied a void was already there before any click). This version stays
+// pale/uniform like real ground glass, with fine sandblasted grain, subtle
+// panel seams (sells "architectural pane" scale), and a soft moving specular
+// glint for idle shimmer. Contrast for the handprint comes from a small local
+// halo, not from darkening the whole floor.
 export const GlassFloorMaterial = shaderMaterial(
   {
     uTime: 0,
-    uColor: new THREE.Color("#0b1220"),
-    uRimColor: new THREE.Color("#8fd8ff"),
+    uColor: new THREE.Color("#aebfc9"),
+    uHighlight: new THREE.Color("#f4fbff"),
   },
   /* glsl */ `
     varying vec2 vUv;
@@ -21,7 +24,7 @@ export const GlassFloorMaterial = shaderMaterial(
   /* glsl */ `
     uniform float uTime;
     uniform vec3 uColor;
-    uniform vec3 uRimColor;
+    uniform vec3 uHighlight;
     varying vec2 vUv;
 
     float hash(vec2 p) {
@@ -39,28 +42,43 @@ export const GlassFloorMaterial = shaderMaterial(
       return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
     }
 
+    // multi-octave for a fine sandblasted grain rather than blocky bands
+    float grain(vec2 p) {
+      float n = 0.0;
+      n += noise(p * 40.0) * 0.5;
+      n += noise(p * 90.0 + 11.0) * 0.3;
+      n += noise(p * 180.0 - 7.0) * 0.2;
+      return n;
+    }
+
+    float panelGrid(vec2 uv) {
+      vec2 g = fract(uv * vec2(5.0, 3.0));
+      vec2 lineDist = min(g, 1.0 - g);
+      return smoothstep(0.012, 0.0, min(lineDist.x, lineDist.y));
+    }
+
     void main() {
       vec2 centered = vUv - 0.5;
-      float dist = length(centered * vec2(1.6, 1.0));
 
-      // radial vignette standing in for a frontal "fresnel" read
-      float rim = smoothstep(0.25, 0.75, dist);
+      // fine, slow-drifting frost grain (not the previous large blocky noise)
+      float g = grain(vUv + vec2(uTime * 0.004, uTime * 0.003));
 
-      // slow drifting frost distortion
-      float frost = noise(vUv * 6.0 + vec2(uTime * 0.03, uTime * 0.02));
-      frost += 0.5 * noise(vUv * 14.0 - vec2(uTime * 0.015, 0.0));
-      frost *= 0.06;
+      // architectural panel seams
+      float seam = panelGrid(vUv);
 
-      // diagonal specular sweep, idle shimmer
-      float sweepPos = fract(uTime * 0.06);
-      float sweep = smoothstep(0.08, 0.0, abs((vUv.x + vUv.y) * 0.5 - sweepPos));
+      // soft diagonal specular glint sweeping across the pane
+      float sweepPos = fract(uTime * 0.05);
+      float sweep = smoothstep(0.18, 0.0, abs((vUv.x + vUv.y) * 0.5 - sweepPos));
 
-      vec3 base = uColor + frost;
-      vec3 col = mix(base, uRimColor, rim * 0.5);
-      col += uRimColor * sweep * 0.35;
+      // very light natural edge darkening only at the extreme corners, not center
+      float edge = smoothstep(0.75, 1.05, length(centered * vec2(1.5, 1.0)));
 
-      float alpha = 0.9 - rim * 0.15;
-      gl_FragColor = vec4(col, alpha);
+      vec3 col = uColor + (g - 0.5) * 0.05;
+      col = mix(col, uHighlight, seam * 0.25);
+      col = mix(col, uHighlight, sweep * 0.18);
+      col *= 1.0 - edge * 0.12;
+
+      gl_FragColor = vec4(col, 0.96);
     }
   `,
 );
