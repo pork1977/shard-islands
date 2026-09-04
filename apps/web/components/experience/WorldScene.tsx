@@ -12,6 +12,8 @@ import {
   TERRAIN_SIZE,
   WATER_HEIGHT,
 } from "@/lib/world/generateTerrain";
+import { generateProps } from "@/lib/world/generateProps";
+import WorldProps from "@/components/world/WorldProps";
 import { useGameStore } from "@/lib/store/useGameStore";
 import { revealAt } from "@/lib/timeline";
 
@@ -34,6 +36,8 @@ declare module "@react-three/fiber" {
       uMaxHeight?: number;
       uWaterHeight?: number;
       uFogColor?: THREE.ColorRepresentation;
+      uRoads?: THREE.Vector4[];
+      uRoadCount?: number;
     };
   }
 }
@@ -73,6 +77,14 @@ function Land({ reveal }: { reveal: React.RefObject<number> }) {
   const materialRef = useRef<InstanceType<typeof TerrainMaterial>>(null);
   const terrain = useMemo(() => generateTerrain(), []);
 
+  // same generator the buildings use, so the roads actually join the towns
+  const roads = useMemo(() => {
+    const { roads: segs } = generateProps();
+    const packed = Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0));
+    segs.slice(0, 8).forEach((s, i) => packed[i].set(s[0], s[1], s[2], s[3]));
+    return { packed, count: Math.min(segs.length, 8) };
+  }, []);
+
   useFrame((state) => {
     if (!materialRef.current) return;
     materialRef.current.uTime = state.clock.elapsedTime;
@@ -86,6 +98,8 @@ function Land({ reveal }: { reveal: React.RefObject<number> }) {
           ref={materialRef}
           uMaxHeight={TERRAIN_MAX_HEIGHT}
           uWaterHeight={WATER_HEIGHT}
+          uRoads={roads.packed}
+          uRoadCount={roads.count}
         />
       </mesh>
 
@@ -208,8 +222,15 @@ export default function WorldScene() {
 
   return (
     <group>
+      {/* Everything else is hand-lit in its own shader, but the instanced
+          buildings and trees use a standard material, which needs real
+          lights. Matched to the sun direction baked into the shaders. */}
+      <ambientLight intensity={1.5} />
+      <directionalLight position={[-90, 70, 170]} intensity={2.2} />
+
       <Sky reveal={reveal} />
       <Land reveal={reveal} />
+      <WorldProps />
       <Clouds texture={cloudTexture} />
     </group>
   );

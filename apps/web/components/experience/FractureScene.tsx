@@ -9,6 +9,7 @@ import { buildFractureGeometry } from "@/lib/fracture/fractureGeometry";
 import { useGameStore } from "@/lib/store/useGameStore";
 import { resetPlayerState } from "@/lib/net/playerState";
 import { FLIGHT_ALTITUDE } from "@/lib/world/generateTerrain";
+import { useFlightControls } from "@/components/controllers/useFlightControls";
 import {
   CRACK_DURATION,
   COLLAPSE_AT,
@@ -42,6 +43,9 @@ export default function FractureScene({ normalMap }: { normalMap: THREE.Texture 
   const impact = useGameStore((s) => s.impact);
   const strikeAt = useGameStore((s) => s.strikeAt);
   const beginFlight = useGameStore((s) => s.beginFlight);
+
+  const input = useFlightControls();
+  const driftRef = useRef({ x: 0, y: 0, vx: 0, vy: 0 });
 
   const impact2D = useMemo<[number, number]>(
     () => (impact ? [impact[0], impact[1]] : [0, 0]),
@@ -99,10 +103,33 @@ export default function FractureScene({ normalMap }: { normalMap: THREE.Texture 
     if (p > 0) {
       const eased = p * p * (3 - 2 * p); // smoothstep: eases in, then commits
       const accel = Math.pow(p, 1.7); // and keeps accelerating downward
+
+      // Steerable descent. A seven-second fall you cannot touch is a
+      // cutscene, and it drags however good it looks — letting the player
+      // pick where they come down turns the same seconds into a skydive.
+      // Authority builds in over the first moments so the break still reads
+      // as something happening TO them before it becomes theirs.
+      const authority = THREE.MathUtils.clamp((p - 0.06) * 4, 0, 1);
+      const drift = driftRef.current;
+      drift.vx += -input.current.turn * authority * dt * 26;
+      drift.vy += -input.current.pitch * authority * dt * 26;
+      drift.vx *= Math.pow(0.12, dt); // air resistance, so it settles
+      drift.vy *= Math.pow(0.12, dt);
+      drift.x += drift.vx * dt;
+      drift.y += drift.vy * dt;
+
       state.camera.position.set(
-        THREE.MathUtils.lerp(0, impact2D[0] * 0.85, eased),
-        THREE.MathUtils.lerp(0, impact2D[1] * 0.85, eased),
+        THREE.MathUtils.lerp(0, impact2D[0] * 0.85, eased) + drift.x,
+        THREE.MathUtils.lerp(0, impact2D[1] * 0.85, eased) + drift.y,
         THREE.MathUtils.lerp(5, FLIGHT_ALTITUDE, accel),
+      );
+
+      // lean into the direction of travel — without it, steering moves the
+      // world past you but the fall itself feels inert
+      state.camera.rotation.set(
+        THREE.MathUtils.clamp(drift.vy * 0.012, -0.35, 0.35),
+        THREE.MathUtils.clamp(-drift.vx * 0.012, -0.35, 0.35),
+        0,
       );
 
       // Field of view widens as the fall accelerates. Falling through open
@@ -125,6 +152,7 @@ export default function FractureScene({ normalMap }: { normalMap: THREE.Texture 
         ref={materialRef}
         uNormalMap={normalMap}
         uImpact={impactVec}
+        transparent
       />
     </mesh>
   );

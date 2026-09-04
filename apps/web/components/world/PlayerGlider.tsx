@@ -178,7 +178,12 @@ export default function PlayerGlider() {
   return (
     <group ref={groupRef}>
       <mesh geometry={geometry}>
-        <gliderCraftMaterial ref={craftMaterialRef} />
+        <gliderCraftMaterial
+          ref={craftMaterialRef}
+          transparent
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
       </mesh>
     </group>
   );

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useGameStore } from "@/lib/store/useGameStore";
+import { PLUNGE_AT } from "@/lib/timeline";
 
 /**
  * A glanceable control legend, shown once flying begins.
@@ -13,17 +14,33 @@ import { useGameStore } from "@/lib/store/useGameStore";
  */
 export default function ControlsHint() {
   const phase = useGameStore((s) => s.phase);
+  const strikeAt = useGameStore((s) => s.strikeAt);
   const [faded, setFaded] = useState(false);
+  const [visible, setVisible] = useState(false);
 
+  // Appears as the fall begins, not when flight does — the descent is
+  // steerable, and the player needs to know that while it is happening.
   useEffect(() => {
-    if (phase !== "flying") return;
+    if (phase === "landing") {
+      setVisible(false);
+      setFaded(false);
+      return;
+    }
+    const untilPlunge = Math.max(
+      0,
+      PLUNGE_AT * 1000 - (performance.now() - strikeAt),
+    );
+    const show = setTimeout(() => setVisible(true), untilPlunge);
     // stays legible for a good while — the first version dimmed so far, so
     // fast, that it was easy to miss the instructions were there at all
-    const t = setTimeout(() => setFaded(true), 25000);
-    return () => clearTimeout(t);
-  }, [phase]);
+    const dim = setTimeout(() => setFaded(true), untilPlunge + 25000);
+    return () => {
+      clearTimeout(show);
+      clearTimeout(dim);
+    };
+  }, [phase, strikeAt]);
 
-  if (phase !== "flying") return null;
+  if (!visible) return null;
 
   return (
     <div

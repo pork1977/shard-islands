@@ -18,6 +18,11 @@ export const TerrainMaterial = shaderMaterial(
     uFogColor: new THREE.Color("#b6d4ea"),
     uMaxHeight: 78,
     uWaterHeight: 9,
+    uRoadColor: new THREE.Color("#9c8a6b"),
+    // roads as line segments the shader measures distance to — far cheaper
+    // and better-fitting than laying ribbon geometry over uneven ground
+    uRoads: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0)),
+    uRoadCount: 0,
   },
   /* glsl */ `
     varying vec3 vNormalW;
@@ -45,6 +50,9 @@ export const TerrainMaterial = shaderMaterial(
     uniform vec3 uFogColor;
     uniform float uMaxHeight;
     uniform float uWaterHeight;
+    uniform vec3 uRoadColor;
+    uniform vec4 uRoads[8];
+    uniform int uRoadCount;
 
     varying vec3 vNormalW;
     varying vec3 vPos;
@@ -106,6 +114,21 @@ export const TerrainMaterial = shaderMaterial(
       col = mix(col, uRock, smoothstep(0.5, 0.82, steep));
       // snow caps
       col = mix(col, uSnow, smoothstep(0.80, 0.94, h / uMaxHeight) * (1.0 - steep * 0.5));
+
+      // roads linking the settlements, laid on wherever the ground is gentle
+      float road = 0.0;
+      for (int i = 0; i < 8; i++) {
+        if (i >= uRoadCount) break;
+        vec2 a = uRoads[i].xy;
+        vec2 b = uRoads[i].zw;
+        vec2 ab = b - a;
+        float t = clamp(dot(vPos.xy - a, ab) / max(dot(ab, ab), 0.0001), 0.0, 1.0);
+        float d = length(vPos.xy - (a + ab * t));
+        road = max(road, 1.0 - smoothstep(3.0, 7.0, d));
+      }
+      // roads do not climb cliffs
+      road *= 1.0 - smoothstep(0.25, 0.5, steep);
+      col = mix(col, uRoadColor, road * 0.85);
 
       // strong key light with a bright sky fill — flat, sunny and saturated
       col *= 0.52 * sky + lambert * 1.05;

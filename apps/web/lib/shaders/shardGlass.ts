@@ -215,6 +215,11 @@ export const ShardGlassMaterial = shaderMaterial(
       vec3 cutCol = uGlassColor * 0.6 + uLightColor * 0.25 + uGlowColor * exp(-vDist * 3.0) * 0.55;
       col = mix(col, cutCol, side * vCracked);
 
+      // Each piece dissolves as it tumbles away, rather than the whole sheet
+      // of glass being cut the instant the world takes over — that switch
+      // read as the debris harshly vanishing off the screen.
+      float alpha = 1.0 - smoothstep(0.9, 2.4, vFall);
+
       // A tumbling piece is lit from two places: the cold source above, which
       // it flashes as it spins through the right angle, and the glow rising
       // from the void it is falling into.
@@ -228,7 +233,7 @@ export const ShardGlassMaterial = shaderMaterial(
         col *= 1.0 / (1.0 + vFall * 0.55);
       }
 
-      gl_FragColor = vec4(col, 1.0);
+      gl_FragColor = vec4(col, alpha);
     }
   `,
 );
