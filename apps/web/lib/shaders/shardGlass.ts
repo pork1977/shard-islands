@@ -22,17 +22,21 @@ export const ShardGlassMaterial = shaderMaterial(
     ...glassUniformDefaults(),
     uGlowColor: new THREE.Color("#5fe4ff"),
     uProgress: 0,
+    uImpact: new THREE.Vector2(0, 0),
   },
   /* glsl */ `
     attribute vec2 aPaneUv;
+    attribute vec2 aCentroidUv;
     attribute vec3 aCentroid;
     attribute vec3 aRandom;
     attribute float aEdge;
     attribute float aDist;
 
     uniform float uProgress;
+    uniform vec2 uImpact;
 
     varying vec2 vPaneUv;
+    varying vec2 vCentroidUv;
     varying vec3 vNormal;
     varying vec3 vRandom;
     varying float vEdge;
@@ -40,25 +44,40 @@ export const ShardGlassMaterial = shaderMaterial(
     varying float vCracked;
     varying float vFlash;
 
-    // When this particular shard breaks. Quantising into discrete bursts is
-    // what stops the fracture reading as one smooth sweep — glass goes in
-    // steps: a crack, a pause, then several more at once.
-    float shardCrackTime(float dist, float rnd) {
+    // When this particular shard breaks.
+    //
+    // Distance alone makes every shard at the same radius break together, so
+    // the fracture arrives as expanding concentric rings. Real fracture runs
+    // along paths: some directions race to the edge while their neighbours
+    // barely move. The angular term biases propagation speed by direction, so
+    // the front advances in uneven fingers instead of rings.
+    //
+    // The burst quantisation stays — glass does go in steps rather than one
+    // smooth sweep — but each burst is now an irregular blob rather than a ring.
+    float shardCrackTime(float dist, float angle, float rnd) {
+      float dirBias =
+          sin(angle * 3.0 + 0.7) * 0.5
+        + sin(angle * 5.0 - 1.9) * 0.32
+        + sin(angle * 9.0 + 3.3) * 0.18;
+
       float base = pow(clamp(dist, 0.0, 1.0), 0.72);
-      float jitter = (rnd - 0.5) * 0.17;
-      float raw = clamp(base + jitter, 0.0, 1.0);
+      float raw = base * (1.0 + dirBias * 0.38) + (rnd - 0.5) * 0.13;
+      raw = clamp(raw, 0.0, 1.0);
+
       float bursts = 9.0;
       return floor(raw * bursts) / bursts;
     }
 
     void main() {
       vPaneUv = aPaneUv;
+      vCentroidUv = aCentroidUv;
       vNormal = normal;
       vRandom = aRandom;
       vEdge = aEdge;
       vDist = aDist;
 
-      float ct = shardCrackTime(aDist, aRandom.y);
+      vec2 fromImpact = aCentroid.xy - uImpact;
+      float ct = shardCrackTime(aDist, atan(fromImpact.y, fromImpact.x), aRandom.y);
       vCracked = smoothstep(ct, ct + 0.025, uProgress);
       // brief white-hot pulse as this piece lets go
       vFlash = vCracked * (1.0 - smoothstep(ct + 0.02, ct + 0.14, uProgress));
@@ -76,6 +95,7 @@ export const ShardGlassMaterial = shaderMaterial(
     uniform vec3 uGlowColor;
 
     varying vec2 vPaneUv;
+    varying vec2 vCentroidUv;
     varying vec3 vNormal;
     varying vec3 vRandom;
     varying float vEdge;
@@ -86,12 +106,27 @@ export const ShardGlassMaterial = shaderMaterial(
     ${GLASS_HELPERS_GLSL}
 
     void main() {
-      // Once a piece has cracked it has shifted slightly in its socket, so the
+      // Once a piece has cracked it sits slightly askew in its socket, so the
       // view through it stops lining up with its neighbours and the tile seams
-      // visibly jog at the crack. Scaled by vCracked so nothing moves before
-      // the fracture arrives.
-      vec2 shardShift = (vRandom.xy - 0.5) * 0.03 * (1.0 - vDist * 0.55) * vCracked;
-      vec3 col = glassSurface(vPaneUv + shardShift);
+      // visibly jog at the crack.
+      //
+      // Offsetting the sample alone is not enough: an offset is a pure
+      // translation, so a horizontal seam stays perfectly horizontal and every
+      // jog ends up axis-aligned. A real piece TILTS, which rotates the view
+      // through it. Hence a small rotation about the shard's own centre, plus
+      // a slight scale for the piece sitting fractionally proud or sunk.
+      float tilt = (vRandom.z - 0.5) * 0.07 * (1.0 - vDist * 0.45) * vCracked;
+      float s = sin(tilt);
+      float c = cos(tilt);
+
+      vec2 rel = vPaneUv - vCentroidUv;
+      rel.x *= uAspect;                       // rotate in square space, not UV space
+      rel = vec2(rel.x * c - rel.y * s, rel.x * s + rel.y * c);
+      rel *= 1.0 + (vRandom.x - 0.5) * 0.03 * vCracked;
+      rel.x /= uAspect;
+
+      vec2 shardShift = (vRandom.xy - 0.5) * 0.022 * (1.0 - vDist * 0.55) * vCracked;
+      vec3 col = glassSurface(vCentroidUv + rel + shardShift);
       col *= mix(1.0, 0.86 + vRandom.z * 0.28, vCracked);
 
       // aEdge runs 1 at the shard centre to 0 along its outline. fwidth gives a

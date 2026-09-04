@@ -22,6 +22,7 @@ declare module "@react-three/fiber" {
       uLightPos?: THREE.Vector2;
       uGlowColor?: THREE.ColorRepresentation;
       uProgress?: number;
+      uImpact?: THREE.Vector2;
     };
   }
 }
@@ -71,9 +72,18 @@ export default function FractureScene({ normalMap }: { normalMap: THREE.Texture 
     mat.uProgress = Math.pow(u, 1.45);
   });
 
+  const impactVec = useMemo(
+    () => new THREE.Vector2(impact2D[0], impact2D[1]),
+    [impact2D],
+  );
+
   return (
     <mesh geometry={geometry}>
-      <shardGlassMaterial ref={materialRef} uNormalMap={normalMap} />
+      <shardGlassMaterial
+        ref={materialRef}
+        uNormalMap={normalMap}
+        uImpact={impactVec}
+      />
     </mesh>
   );
 }

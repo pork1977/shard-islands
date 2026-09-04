@@ -29,6 +29,7 @@ export function buildFractureGeometry(
   const positions: number[] = [];
   const normals: number[] = [];
   const paneUvs: number[] = [];
+  const centroidUvs: number[] = [];
   const centroids: number[] = [];
   const randoms: number[] = [];
   const edges: number[] = [];
@@ -91,6 +92,9 @@ export function buildFractureGeometry(
       normals.push(nx, ny, nz);
       const [u, v] = uv ?? uvOf(x, y);
       paneUvs.push(u, v);
+      // carried on every vertex, not just the centre ones, so the fragment
+      // shader can rotate each shard's view about its own centre
+      centroidUvs.push(ccu, ccv);
       centroids.push(cx, cy, 0);
       randoms.push(rand[0], rand[1], rand[2]);
       edges.push(edge);
@@ -135,6 +139,7 @@ export function buildFractureGeometry(
   geometry.setAttribute("position", attr(positions, 3));
   geometry.setAttribute("normal", attr(normals, 3));
   geometry.setAttribute("aPaneUv", attr(paneUvs, 2));
+  geometry.setAttribute("aCentroidUv", attr(centroidUvs, 2));
   geometry.setAttribute("aCentroid", attr(centroids, 3));
   geometry.setAttribute("aRandom", attr(randoms, 3));
   geometry.setAttribute("aEdge", attr(edges, 1));
