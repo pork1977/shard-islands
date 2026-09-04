@@ -14,6 +14,7 @@ import {
 } from "@/lib/world/generateTerrain";
 import { generateProps } from "@/lib/world/generateProps";
 import WorldProps from "@/components/world/WorldProps";
+import Monolith from "@/components/world/Monolith";
 import { useGameStore } from "@/lib/store/useGameStore";
 import { revealAt } from "@/lib/timeline";
 
@@ -83,11 +84,11 @@ function Land({ reveal }: { reveal: React.RefObject<number> }) {
   // ground lands under the city rather than beside it
   const layout = useMemo(() => {
     const { roads: segs, city } = generateProps();
-    const packed = Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0));
-    segs.slice(0, 8).forEach((s, i) => packed[i].set(s[0], s[1], s[2], s[3]));
+    const packed = Array.from({ length: 16 }, () => new THREE.Vector4(0, 0, 0, 0));
+    segs.slice(0, 16).forEach((s, i) => packed[i].set(s[0], s[1], s[2], s[3]));
     return {
       packed,
-      count: Math.min(segs.length, 8),
+      count: Math.min(segs.length, 16),
       city: new THREE.Vector4(city.cx, city.cy, city.radius, city.block),
     };
   }, []);
@@ -241,6 +242,7 @@ export default function WorldScene() {
       <Sky reveal={reveal} />
       <Land reveal={reveal} />
       <WorldProps />
+      <Monolith />
       <Clouds texture={cloudTexture} />
     </group>
   );

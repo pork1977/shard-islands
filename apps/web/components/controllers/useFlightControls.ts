@@ -8,49 +8,76 @@ export interface FlightInput {
   /** -1..1, nose down/up. */
   pitch: number;
   boosting: boolean;
+  /** Camera orbit offsets in radians — look around WITHOUT steering. */
+  lookYaw: number;
+  lookPitch: number;
 }
 
 /**
- * Steering input, unified across mouse and touch.
+ * Steering and free-look.
  *
- * Both go through Pointer Events on purpose: the brief requires a young
- * child to be able to fly this, so there is exactly one interaction —
- * press and drag in the direction you want to go, release to level out.
- * No multi-touch, no precision targets, no reading required. Keyboard is
- * added on top for adults who expect WASD, not as the primary path.
+ * Mouse drag orbits the camera and deliberately does NOT touch the flight
+ * controls, so you can look around the craft while holding a heading.
+ * Touch drag still steers, because a phone has no second input to spare —
+ * splitting on pointer type is what lets one gesture mean the right thing
+ * on each device. Keyboard always steers.
  */
 export function useFlightControls(): React.RefObject<FlightInput> {
-  const input = useRef<FlightInput>({ turn: 0, pitch: 0, boosting: false });
+  const input = useRef<FlightInput>({
+    turn: 0,
+    pitch: 0,
+    boosting: false,
+    lookYaw: 0,
+    lookPitch: 0,
+  });
 
   useEffect(() => {
     const keys = new Set<string>();
-    const drag = { active: false, originX: 0, originY: 0 };
-
-    // drag distance needed for full deflection, relative to screen size, so
-    // the control feels the same on a phone as on a desktop monitor
-    const range = () => Math.min(window.innerWidth, window.innerHeight) * 0.28;
-
-    const applyDrag = (x: number, y: number) => {
-      const r = range();
-      input.current.turn = clamp((x - drag.originX) / r, -1, 1);
-      input.current.pitch = clamp((y - drag.originY) / r, -1, 1);
+    const drag = {
+      active: false,
+      steering: false,
+      originX: 0,
+      originY: 0,
+      baseYaw: 0,
+      basePitch: 0,
     };
+
+    // drag distance for full deflection, relative to screen size, so the
+    // control feels the same on a phone as on a desktop monitor
+    const range = () => Math.min(window.innerWidth, window.innerHeight) * 0.28;
 
     const onPointerDown = (e: PointerEvent) => {
       drag.active = true;
+      drag.steering = e.pointerType !== "mouse";
       drag.originX = e.clientX;
       drag.originY = e.clientY;
+      drag.baseYaw = input.current.lookYaw;
+      drag.basePitch = input.current.lookPitch;
     };
 
     const onPointerMove = (e: PointerEvent) => {
       if (!drag.active) return;
-      applyDrag(e.clientX, e.clientY);
+      const dx = e.clientX - drag.originX;
+      const dy = e.clientY - drag.originY;
+
+      if (drag.steering) {
+        const r = range();
+        input.current.turn = clamp(dx / r, -1, 1);
+        input.current.pitch = clamp(dy / r, -1, 1);
+      } else {
+        // free-look: full sweep across the window is a bit over half a turn
+        input.current.lookYaw = clamp(drag.baseYaw - dx * 0.005, -2.4, 2.4);
+        input.current.lookPitch = clamp(drag.basePitch - dy * 0.004, -0.9, 0.9);
+      }
     };
 
     const endDrag = () => {
+      if (drag.steering) {
+        input.current.turn = 0;
+        input.current.pitch = 0;
+      }
       drag.active = false;
-      input.current.turn = 0;
-      input.current.pitch = 0;
+      drag.steering = false;
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -71,7 +98,7 @@ export function useFlightControls(): React.RefObject<FlightInput> {
       if (left || right || up || down) {
         input.current.turn = (right ? 1 : 0) - (left ? 1 : 0);
         input.current.pitch = (down ? 1 : 0) - (up ? 1 : 0);
-      } else if (!drag.active) {
+      } else if (!drag.steering) {
         input.current.turn = 0;
         input.current.pitch = 0;
       }

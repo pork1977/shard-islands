@@ -21,7 +21,7 @@ export const TerrainMaterial = shaderMaterial(
     uRoadColor: new THREE.Color("#9c8a6b"),
     // roads as line segments the shader measures distance to — far cheaper
     // and better-fitting than laying ribbon geometry over uneven ground
-    uRoads: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0)),
+    uRoads: Array.from({ length: 16 }, () => new THREE.Vector4(0, 0, 0, 0)),
     uRoadCount: 0,
     /** xy = city centre, z = radius, w = block size. */
     uCity: new THREE.Vector4(0, 0, 0, 34),
@@ -54,7 +54,7 @@ export const TerrainMaterial = shaderMaterial(
     uniform float uMaxHeight;
     uniform float uWaterHeight;
     uniform vec3 uRoadColor;
-    uniform vec4 uRoads[8];
+    uniform vec4 uRoads[16];
     uniform int uRoadCount;
     uniform vec4 uCity;
     uniform vec3 uUrban;
@@ -122,7 +122,7 @@ export const TerrainMaterial = shaderMaterial(
 
       // roads linking the settlements, laid on wherever the ground is gentle
       float road = 0.0;
-      for (int i = 0; i < 8; i++) {
+      for (int i = 0; i < 16; i++) {
         if (i >= uRoadCount) break;
         vec2 a = uRoads[i].xy;
         vec2 b = uRoads[i].zw;

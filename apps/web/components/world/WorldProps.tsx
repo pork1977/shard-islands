@@ -4,6 +4,7 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { generateProps } from "@/lib/world/generateProps";
 import { TERRAIN_BASE_Z } from "@/lib/world/generateTerrain";
+import { applyBuildingWindows } from "@/lib/shaders/buildingWindows";
 
 /**
  * Buildings and woodland.
@@ -27,6 +28,12 @@ export default function WorldProps() {
     () => props.buildings.filter((b) => b.pitched === 1),
     [props],
   );
+
+  const wallMaterial = useMemo(() => {
+    const m = new THREE.MeshLambertMaterial();
+    applyBuildingWindows(m);
+    return m;
+  }, []);
 
   // Cones and cylinders are built along +Y in three.js, but this world's up
   // axis is +Z — without rotating the geometry itself, every tree and roof
@@ -118,11 +125,10 @@ export default function WorldProps() {
     <group>
       <instancedMesh
         ref={bodyRef}
-        args={[undefined, undefined, props.buildings.length]}
+        args={[undefined, wallMaterial, props.buildings.length]}
         frustumCulled={false}
       >
         <boxGeometry args={[1, 1, 1]} />
-        <meshLambertMaterial />
       </instancedMesh>
 
       <instancedMesh

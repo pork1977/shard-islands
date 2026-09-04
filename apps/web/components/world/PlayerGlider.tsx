@@ -50,6 +50,7 @@ export default function PlayerGlider() {
   const camTarget = useMemo(() => new THREE.Vector3(), []);
   const lookTarget = useMemo(() => new THREE.Vector3(), []);
   const lookAt = useMemo(() => new THREE.Vector3(), []);
+  const boom = useMemo(() => new THREE.Vector3(), []);
   const basis = useMemo(() => new THREE.Matrix4(), []);
 
   useFrame((state, rawDelta) => {
@@ -157,13 +158,25 @@ export default function PlayerGlider() {
     // Chase camera: both position and look-at are damped, never rigidly
     // parented. A hard-parented camera transmits every twitch of the craft
     // and makes flight feel jittery instead of cinematic.
+    // Free-look orbits the camera about the craft without touching where it
+    // is heading — the boom swings round, the flight path does not change.
+    const ly = inp.lookYaw;
+    const lp = inp.lookPitch;
+    const cosP = Math.cos(lp);
+    boom
+      .copy(forward)
+      .multiplyScalar(-cosP * Math.cos(ly))
+      .addScaledVector(right, -cosP * Math.sin(ly))
+      .addScaledVector(up, Math.sin(lp))
+      .normalize();
+
     camTarget
       .set(p.position[0], p.position[1], p.position[2])
-      .addScaledVector(forward, -7.5)
+      .addScaledVector(boom, 7.5)
       .addScaledVector(up, 2.3);
     lookTarget
       .set(p.position[0], p.position[1], p.position[2])
-      .addScaledVector(forward, 9);
+      .addScaledVector(forward, 9 * Math.max(0.15, Math.cos(ly)));
 
     const follow = 1 - Math.pow(0.0016, dt);
     state.camera.position.lerp(camTarget, follow);
@@ -175,7 +188,10 @@ export default function PlayerGlider() {
     // at, then let speed nudge it — going faster should feel like going
     // faster, not just move the scenery quicker.
     const cam = state.camera as unknown as THREE.PerspectiveCamera;
-    const fovTarget = 62 + (p.speed / FLIGHT.baseForwardSpeed - 1) * 14;
+    // Boost widens the lens only slightly. At the previous rate it pulled
+    // back so far on boost that the craft shrank and the world felt further
+    // away, which is the opposite of what going faster should feel like.
+    const fovTarget = 62 + (p.speed / FLIGHT.baseForwardSpeed - 1) * 5;
     cam.fov += (fovTarget - cam.fov) * Math.min(1, dt * 2.2);
     cam.updateProjectionMatrix();
   });

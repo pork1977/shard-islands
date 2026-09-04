@@ -178,9 +178,26 @@ export function generateProps(seed = 24601): PropsSpec {
     }
   }
 
+  // A road NETWORK rather than spokes from one hub: every town joins the
+  // city and also its nearest neighbour, so the map has cross-country routes
+  // running through it instead of a star.
   const roads: RoadSegment[] = [];
   for (let i = 1; i < towns.length; i++) {
     roads.push([towns[0][0], towns[0][1], towns[i][0], towns[i][1]]);
+
+    let nearest = -1;
+    let nearestD = Infinity;
+    for (let j = 1; j < towns.length; j++) {
+      if (i === j) continue;
+      const d = Math.hypot(towns[i][0] - towns[j][0], towns[i][1] - towns[j][1]);
+      if (d < nearestD) {
+        nearestD = d;
+        nearest = j;
+      }
+    }
+    if (nearest > 0 && nearest > i) {
+      roads.push([towns[i][0], towns[i][1], towns[nearest][0], towns[nearest][1]]);
+    }
   }
 
   // ---- woodland, now scenery rather than the whole map --------------------
