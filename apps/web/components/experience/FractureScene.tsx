@@ -7,6 +7,12 @@ import { ShardGlassMaterial } from "@/lib/shaders/shardGlass";
 import { generateVoronoiCells } from "@/lib/fracture/generateVoronoiCells";
 import { buildFractureGeometry } from "@/lib/fracture/fractureGeometry";
 import { useGameStore } from "@/lib/store/useGameStore";
+import {
+  CRACK_DURATION,
+  COLLAPSE_AT,
+  PLUNGE_AT,
+  PLUNGE_DURATION,
+} from "@/lib/timeline";
 
 extend({ ShardGlassMaterial });
 
@@ -27,17 +33,6 @@ declare module "@react-three/fiber" {
     };
   }
 }
-
-/** Seconds for the fracture to travel from the strike to the pane edges. */
-const CRACK_DURATION = 2.1;
-/**
- * A beat of held tension after the pane is fully cracked but before it lets
- * go — the "it's going to fall, isn't it" moment.
- */
-const COLLAPSE_AT = CRACK_DURATION + 0.28;
-/** The camera starts falling just after the floor does, not with it. */
-const PLUNGE_AT = COLLAPSE_AT + 0.12;
-const PLUNGE_DURATION = 1.9;
 
 export default function FractureScene({ normalMap }: { normalMap: THREE.Texture }) {
   const materialRef = useRef<InstanceType<typeof ShardGlassMaterial>>(null);

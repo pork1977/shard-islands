@@ -4,21 +4,62 @@ import { useMemo, useRef } from "react";
 import { extend, useFrame, type ThreeElements } from "@react-three/fiber";
 import * as THREE from "three";
 import { CrystalIslandMaterial } from "@/lib/shaders/crystalIsland";
+import { NebulaMaterial } from "@/lib/shaders/nebula";
+import { useGameStore } from "@/lib/store/useGameStore";
+import { revealAt } from "@/lib/timeline";
 import type { WorldSpec, IslandSpec, MirrorSpec } from "@/lib/world/generateWorld";
 
-extend({ CrystalIslandMaterial });
+extend({ CrystalIslandMaterial, NebulaMaterial });
 
 declare module "@react-three/fiber" {
   interface ThreeElements {
     crystalIslandMaterial: ThreeElements["meshBasicMaterial"] & {
       uTime?: number;
+      uReveal?: number;
       uBase?: THREE.ColorRepresentation;
       uVein?: THREE.ColorRepresentation;
       uRim?: THREE.ColorRepresentation;
       uFogColor?: THREE.ColorRepresentation;
       uSeed?: number;
     };
+    nebulaMaterial: ThreeElements["meshBasicMaterial"] & {
+      uTime?: number;
+      uReveal?: number;
+      uDeep?: THREE.ColorRepresentation;
+      uViolet?: THREE.ColorRepresentation;
+      uMagenta?: THREE.ColorRepresentation;
+      uTeal?: THREE.ColorRepresentation;
+    };
   }
+}
+
+/** Seconds since the strike — the world blooms on the fracture's schedule. */
+function useReveal() {
+  const strikeAt = useGameStore((s) => s.strikeAt);
+  const ref = useRef(0);
+  useFrame(() => {
+    ref.current = revealAt((performance.now() - strikeAt) / 1000);
+  });
+  return ref;
+}
+
+function Nebula({ reveal }: { reveal: React.RefObject<number> }) {
+  const materialRef = useRef<InstanceType<typeof NebulaMaterial>>(null);
+
+  useFrame((state) => {
+    if (!materialRef.current) return;
+    materialRef.current.uTime = state.clock.elapsedTime;
+    materialRef.current.uReveal = reveal.current ?? 0;
+    // keep the sky centred on the viewer so it never gets left behind
+    state.scene.getObjectByName("nebula")?.position.copy(state.camera.position);
+  });
+
+  return (
+    <mesh name="nebula" renderOrder={-1}>
+      <sphereGeometry args={[220, 32, 24]} />
+      <nebulaMaterial ref={materialRef} side={THREE.BackSide} depthWrite={false} />
+    </mesh>
+  );
 }
 
 /**
@@ -58,20 +99,24 @@ function makeFallTexture(): THREE.CanvasTexture {
 function Island({
   spec,
   fallTexture,
+  reveal,
 }: {
   spec: IslandSpec;
   fallTexture: THREE.Texture;
+  reveal: React.RefObject<number>;
 }) {
   const materialRef = useRef<InstanceType<typeof CrystalIslandMaterial>>(null);
 
   useFrame((state) => {
-    if (materialRef.current) materialRef.current.uTime = state.clock.elapsedTime;
+    if (!materialRef.current) return;
+    materialRef.current.uTime = state.clock.elapsedTime;
+    materialRef.current.uReveal = reveal.current ?? 0;
   });
 
   return (
     <group position={spec.position} rotation={spec.rotation} scale={spec.scale}>
       <mesh geometry={spec.geometry}>
-        <crystalIslandMaterial ref={materialRef} uSeed={spec.seed} />
+        <crystalIslandMaterial ref={materialRef} uSeed={spec.seed} uVein={spec.hue} />
       </mesh>
 
       {/* neon fluid pouring off the rim and falling away into the void */}
@@ -85,7 +130,7 @@ function Island({
           <meshBasicMaterial
             map={fallTexture}
             transparent
-            color="#5fe4ff"
+            color={spec.hue}
             opacity={0.55}
             depthWrite={false}
             side={THREE.DoubleSide}
@@ -109,11 +154,12 @@ function MirrorShard({ spec }: { spec: MirrorSpec }) {
     <mesh ref={ref} position={spec.position} rotation={spec.rotation}>
       <planeGeometry args={spec.scale} />
       <meshBasicMaterial
-        color="#254a5e"
+        color={spec.tint}
         transparent
-        opacity={0.4}
+        opacity={0.3}
         side={THREE.DoubleSide}
         depthWrite={false}
+        blending={THREE.AdditiveBlending}
         toneMapped={false}
       />
     </mesh>
@@ -157,16 +203,22 @@ export default function WorldScene({
     return geometry;
   }, []);
 
+  const reveal = useReveal();
+
   return (
     <group>
+      <Nebula reveal={reveal} />
+
       {/* The Infinite Core, far below everything */}
       <mesh position={[impact[0] * 0.3, impact[1] * 0.3, -150]}>
         <planeGeometry args={[90, 90]} />
         <meshBasicMaterial
           map={glow}
           transparent
-          color="#3fd0ff"
-          opacity={0.3}
+          // warm magenta core, so the depths read as a different light source
+          // from the cyan fracture above rather than more of the same
+          color="#ff5fb0"
+          opacity={0.34}
           depthWrite={false}
           blending={THREE.AdditiveBlending}
           toneMapped={false}
@@ -178,7 +230,7 @@ export default function WorldScene({
       ))}
 
       {world.islands.map((spec, i) => (
-        <Island key={i} spec={spec} fallTexture={fallTexture} />
+        <Island key={i} spec={spec} fallTexture={fallTexture} reveal={reveal} />
       ))}
 
       {/* motes give the plunge motion parallax — without something at varying

@@ -10,10 +10,13 @@ import * as THREE from "three";
 export const CrystalIslandMaterial = shaderMaterial(
   {
     uTime: 0,
-    uBase: new THREE.Color("#0d1a24"),
+    uReveal: 0,
+    uBase: new THREE.Color("#141033"),
     uVein: new THREE.Color("#4fe0ff"),
-    uRim: new THREE.Color("#7fd4ff"),
-    uFogColor: new THREE.Color("#04080e"),
+    uRim: new THREE.Color("#b98cff"),
+    // fog toward the nebula's violet rather than toward black, so distance
+    // shifts hue instead of just draining the colour away
+    uFogColor: new THREE.Color("#1a0d3a"),
     uSeed: 0,
   },
   /* glsl */ `
@@ -40,6 +43,7 @@ export const CrystalIslandMaterial = shaderMaterial(
   `,
   /* glsl */ `
     uniform float uTime;
+    uniform float uReveal;
     uniform vec3 uBase;
     uniform vec3 uVein;
     uniform vec3 uRim;
@@ -98,8 +102,10 @@ export const CrystalIslandMaterial = shaderMaterial(
       float lit = noise(vLocal * 2.6 + uSeed);
       seam *= smoothstep(0.62, 0.88, lit);
 
+      // veins light up as the world unfolds, rather than being fully lit from
+      // the moment the pane breaks
       float pulse = 0.7 + 0.3 * sin(uTime * 1.1 + uSeed * 6.0 + vLocal.y * 2.0);
-      col += uVein * seam * pulse * 1.6;
+      col += uVein * seam * pulse * (0.5 + 1.6 * uReveal);
 
       // fresnel rim picks out facet edges — kept restrained, since a strong
       // rim over the whole silhouette makes solid rock look like jellyfish

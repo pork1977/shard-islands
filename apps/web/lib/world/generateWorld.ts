@@ -7,15 +7,32 @@ export interface IslandSpec {
   rotation: [number, number, number];
   scale: number;
   seed: number;
+  /** Vein/fall colour — the field is polychrome, not all one cyan. */
+  hue: string;
   /** Neon fluid pouring off the rim, as [angle, length] pairs. */
   falls: [number, number][];
 }
+
+/**
+ * Neon palette for the island veins. Cyan alone made the world monochrome;
+ * spreading hues across the field is most of what makes it read as vibrant.
+ */
+const VEIN_PALETTE = [
+  "#4fe0ff", // cyan
+  "#ff5fd2", // magenta
+  "#9d6bff", // violet
+  "#3fffd0", // teal
+  "#ffcc55", // amber, used sparingly as a warm accent
+  "#4fe0ff",
+  "#ff5fd2",
+];
 
 export interface MirrorSpec {
   position: [number, number, number];
   rotation: [number, number, number];
   scale: [number, number];
   spin: number;
+  tint: string;
 }
 
 export interface WorldSpec {
@@ -64,6 +81,7 @@ export function generateWorld(seed = 1337): WorldSpec {
       rotation: [random() * 0.5 - 0.25, random() * Math.PI * 2, random() * 0.4 - 0.2],
       scale,
       seed: random() * 10,
+      hue: VEIN_PALETTE[Math.floor(random() * VEIN_PALETTE.length)],
       falls,
     });
   }
@@ -83,6 +101,7 @@ export function generateWorld(seed = 1337): WorldSpec {
       rotation: [random() * Math.PI, random() * Math.PI, random() * Math.PI],
       scale: [4 + random() * 9, 4 + random() * 9],
       spin: (random() - 0.5) * 0.12,
+      tint: VEIN_PALETTE[Math.floor(random() * VEIN_PALETTE.length)],
     });
   }
 
