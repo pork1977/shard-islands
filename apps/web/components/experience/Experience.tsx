@@ -1,13 +1,30 @@
 "use client";
 
+import { useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import GlassFloor from "./GlassFloor";
+import FractureScene from "./FractureScene";
+import { generateFrostedGlassNormalTexture } from "@/lib/textures/frostedGlassNormal";
+import { useGameStore } from "@/lib/store/useGameStore";
+
+function Stage() {
+  // one bake, shared by the intact pane and the shards, so the broken pane
+  // keeps exactly the same surface texture
+  const normalMap = useMemo(() => generateFrostedGlassNormalTexture(), []);
+  const phase = useGameStore((s) => s.phase);
+
+  return phase === "landing" ? (
+    <GlassFloor normalMap={normalMap} />
+  ) : (
+    <FractureScene normalMap={normalMap} />
+  );
+}
 
 export default function Experience() {
   return (
     <Canvas camera={{ position: [0, 0, 5], fov: 50 }} dpr={[1, 2]}>
-      <GlassFloor />
+      <Stage />
       <EffectComposer>
         <Bloom intensity={1.0} luminanceThreshold={0.5} luminanceSmoothing={0.25} mipmapBlur />
       </EffectComposer>

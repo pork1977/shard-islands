@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { GlassFloorMaterial } from "@/lib/shaders/glassFloor";
 import { generateHandprintTexture } from "@/lib/textures/handprintTexture";
 import { generateRadialGlowTexture } from "@/lib/textures/radialGlowTexture";
-import { generateFrostedGlassNormalTexture } from "@/lib/textures/frostedGlassNormal";
+import { useGameStore } from "@/lib/store/useGameStore";
 
 extend({ GlassFloorMaterial });
 
@@ -24,10 +24,10 @@ declare module "@react-three/fiber" {
   }
 }
 
-function GlassPane() {
+function GlassPane({ normalMap }: { normalMap: THREE.Texture }) {
   const materialRef = useRef<InstanceType<typeof GlassFloorMaterial>>(null);
   const { viewport } = useThree();
-  const normalMap = useMemo(() => generateFrostedGlassNormalTexture(), []);
+  const strike = useGameStore((s) => s.strike);
 
   useFrame((state) => {
     if (!materialRef.current) return;
@@ -36,7 +36,15 @@ function GlassPane() {
   });
 
   return (
-    <mesh scale={[viewport.width, viewport.height, 1]}>
+    <mesh
+      scale={[viewport.width, viewport.height, 1]}
+      // The whole pane is the target, not just the handprint — a small child
+      // smacking anywhere on the screen has to work.
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        strike([e.point.x, e.point.y, e.point.z]);
+      }}
+    >
       <planeGeometry args={[1, 1]} />
       <glassFloorMaterial ref={materialRef} uNormalMap={normalMap} />
     </mesh>
@@ -65,7 +73,7 @@ function HandprintHotspot() {
     <group ref={groupRef} position={[0, 0, 0.01]}>
       {/* light bleeding through the thinner, etched area of the pane —
           physically plausible, and it's what invites the touch */}
-      <mesh position={[0, 0, -0.001]}>
+      <mesh position={[0, 0, -0.001]} raycast={() => null}>
         <planeGeometry args={[2.6, 2.6]} />
         <meshBasicMaterial
           map={glowTexture}
@@ -79,7 +87,7 @@ function HandprintHotspot() {
       </mesh>
       {/* Etched area lit from beneath. Additive is safe now the pane is dark —
           it only clipped the fingers into a blob back when the glass was pale. */}
-      <mesh>
+      <mesh raycast={() => null}>
         <planeGeometry args={[1.1, 1.1]} />
         <meshBasicMaterial
           map={handTexture}
@@ -95,10 +103,10 @@ function HandprintHotspot() {
   );
 }
 
-export default function GlassFloor() {
+export default function GlassFloor({ normalMap }: { normalMap: THREE.Texture }) {
   return (
     <group>
-      <GlassPane />
+      <GlassPane normalMap={normalMap} />
       <HandprintHotspot />
     </group>
   );
