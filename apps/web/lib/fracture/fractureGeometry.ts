@@ -35,8 +35,6 @@ export function buildFractureGeometry(
   const dists: number[] = [];
 
   const halfDepth = depth / 2;
-  // hairline gap between pieces so the crack lines are actually visible
-  const gap = Math.min(width, height) * 0.0016;
 
   const maxDist = Math.max(
     Math.hypot(width / 2 - impact[0], height / 2 - impact[1]),
@@ -69,15 +67,11 @@ export function buildFractureGeometry(
     cx /= poly.length;
     cy /= poly.length;
 
-    // shrink slightly toward the centre to open the crack gap, clamped so
-    // tiny shards near the impact can't invert
-    const inset = poly.map(([x, y]) => {
-      const dx = cx - x;
-      const dy = cy - y;
-      const len = Math.hypot(dx, dy) || 1;
-      const t = Math.min(gap / len, 0.34);
-      return [x + dx * t, y + dy * t] as [number, number];
-    });
+    // No inset here: the pane must be perfectly seamless until it actually
+    // cracks. The gap is opened in the vertex shader instead, per shard, at
+    // the moment that piece breaks — which is also what lets the very first
+    // frame after the click be indistinguishable from the intact pane.
+    const inset = poly;
 
     const rand = [Math.random(), Math.random(), Math.random()];
     const dist = Math.min(1, Math.hypot(cx - impact[0], cy - impact[1]) / maxDist);
