@@ -7,6 +7,11 @@ import { generateGlider } from "@/lib/world/generateGlider";
 import { GliderCraftMaterial } from "@/lib/shaders/gliderCraft";
 import { useFlightControls } from "@/components/controllers/useFlightControls";
 import { playerState } from "@/lib/net/playerState";
+import {
+  terrainHeightAt,
+  TERRAIN_BASE_Z,
+  TERRAIN_SIZE,
+} from "@/lib/world/generateTerrain";
 import { FLIGHT } from "@shard-islands/shared";
 
 extend({ GliderCraftMaterial });
@@ -24,6 +29,11 @@ declare module "@react-three/fiber" {
 
 /** This world's up axis. The glass floor was looked down through along -Z. */
 const UP = new THREE.Vector3(0, 0, 1);
+
+/** Where the world starts turning you back, and where it refuses outright. */
+const BOUNDARY_SOFT = TERRAIN_SIZE * 0.36;
+const BOUNDARY_HARD = TERRAIN_SIZE * 0.46;
+const CEILING = -12;
 
 export default function PlayerGlider() {
   const geometry = useMemo(() => generateGlider(), []);
@@ -82,9 +92,39 @@ export default function PlayerGlider() {
     p.position[2] += forward.z * p.speed * dt;
     p.velocity = [forward.x * p.speed, forward.y * p.speed, forward.z * p.speed];
 
-    // soft floor and ceiling, so a child holding one direction cannot fly
-    // out of the world entirely
-    p.position[2] = THREE.MathUtils.clamp(p.position[2], -168, -8);
+    // Keep the player inside the map. Beyond the edge there is nothing to
+    // look at, and turning back leaves the world a long way off — so the
+    // boundary curves them round rather than letting them leave.
+    const distFromCentre = Math.hypot(p.position[0], p.position[1]);
+    if (distFromCentre > BOUNDARY_SOFT) {
+      const over = Math.min(
+        1,
+        (distFromCentre - BOUNDARY_SOFT) / (BOUNDARY_HARD - BOUNDARY_SOFT),
+      );
+      // steer the heading back toward the middle, harder the further out
+      const inward = Math.atan2(-p.position[1], -p.position[0]);
+      let delta = inward - p.yaw;
+      while (delta > Math.PI) delta -= Math.PI * 2;
+      while (delta < -Math.PI) delta += Math.PI * 2;
+      p.yaw += delta * over * dt * 1.9;
+
+      // and a hard stop at the very edge, in case they fight it the whole way
+      if (distFromCentre > BOUNDARY_HARD) {
+        const s = BOUNDARY_HARD / distFromCentre;
+        p.position[0] *= s;
+        p.position[1] *= s;
+      }
+    }
+
+    // Ground clearance sampled from the SAME height function the mesh was
+    // built from, so the player skims the actual hills rather than a guess.
+    const ground =
+      TERRAIN_BASE_Z + terrainHeightAt(p.position[0], p.position[1]) + 3.5;
+    if (p.position[2] < ground) {
+      p.position[2] = ground;
+      if (p.pitch < 0) p.pitch *= 0.4; // scrub the dive rather than ploughing in
+    }
+    p.position[2] = Math.min(p.position[2], CEILING);
 
     const group = groupRef.current;
     if (!group) return;

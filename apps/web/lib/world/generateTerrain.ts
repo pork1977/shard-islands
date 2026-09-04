@@ -19,58 +19,63 @@ function valueNoise(x: number, y: number): number {
   return a * (1 - ux) * (1 - uy) + b * ux * (1 - uy) + c * (1 - ux) * uy + d * ux * uy;
 }
 
-/** Ridged fbm — sharp crests rather than rolling hills, to suit crystal. */
-function ridged(x: number, y: number, octaves = 5): number {
+function fbm(x: number, y: number, octaves: number): number {
   let sum = 0;
   let amp = 0.5;
   let freq = 1;
   for (let o = 0; o < octaves; o++) {
-    const n = valueNoise(x * freq, y * freq);
-    const r = 1 - Math.abs(n * 2 - 1);
-    sum += r * r * amp;
+    sum += valueNoise(x * freq, y * freq) * amp;
     amp *= 0.5;
-    freq *= 2.07;
+    freq *= 2.03;
   }
   return sum;
 }
 
-export interface TerrainData {
-  geometry: THREE.BufferGeometry;
-  size: number;
-  maxHeight: number;
-}
+export const TERRAIN_SIZE = 900;
+export const TERRAIN_BASE_Z = -176;
+export const TERRAIN_MAX_HEIGHT = 78;
+/** Standing water fills anything below this height. */
+export const WATER_HEIGHT = 9;
 
 /**
- * The land below — the thing that turns a scatter of floating rocks into a
- * map you are flying over. Without a ground plane there is no sense of
- * place, scale or direction, which is what "no world shown" amounts to.
+ * The single source of truth for ground height, in terrain-local units.
  *
- * Built in the XY plane with height along +Z, matching this world's
- * convention (the glass floor was looked down through along -Z).
+ * Exported because the flight controller has to sample the SAME surface the
+ * mesh was built from — deriving the collision surface separately guarantees
+ * the player clips through hills or floats above them.
  */
-export function generateTerrain(size = 520, segments = 108): TerrainData {
-  const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
+export function terrainHeightAt(x: number, y: number): number {
+  // rolling continental shape, so the map has broad valleys and highlands
+  const continental = fbm(x * 0.0022 + 11, y * 0.0022 - 7, 3);
+  const detail = fbm(x * 0.011, y * 0.011, 4);
+
+  // ridges only above a threshold, so lowlands stay open and flyable
+  const ridge = Math.pow(Math.max(0, continental - 0.42) * 2.4, 1.6);
+
+  // relief pushed hard: seen from flying altitude, gentle undulation reads as
+  // a flat plain, and the map needs recognisable hills and valleys
+  let h = (continental * 0.5 + detail * 0.45) * TERRAIN_MAX_HEIGHT * 0.8;
+  h += ridge * TERRAIN_MAX_HEIGHT * 1.5;
+  return h;
+}
+
+export interface TerrainData {
+  geometry: THREE.BufferGeometry;
+}
+
+export function generateTerrain(segments = 190): TerrainData {
+  const geometry = new THREE.PlaneGeometry(
+    TERRAIN_SIZE,
+    TERRAIN_SIZE,
+    segments,
+    segments,
+  );
   const position = geometry.attributes.position as THREE.BufferAttribute;
 
-  const maxHeight = 62;
-
   for (let i = 0; i < position.count; i++) {
-    const x = position.getX(i);
-    const y = position.getY(i);
-
-    const continental = valueNoise(x * 0.004 + 11, y * 0.004 - 7);
-    const peaks = ridged(x * 0.012, y * 0.012);
-
-    // basins in the middle of the map, ridges around them
-    let h = peaks * continental * maxHeight;
-    h -= continental * 8;
-
-    position.setZ(i, h);
+    position.setZ(i, terrainHeightAt(position.getX(i), position.getY(i)));
   }
 
-  const faceted = geometry.toNonIndexed();
-  faceted.computeVertexNormals();
-  geometry.dispose();
-
-  return { geometry: faceted, size, maxHeight };
+  geometry.computeVertexNormals();
+  return { geometry };
 }

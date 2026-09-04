@@ -1,19 +1,21 @@
 import { shaderMaterial } from "@react-three/drei";
 import * as THREE from "three";
 
-// The land below. Height drives the palette — deep glowing basins through
-// mid slopes to pale crystalline crests — so the map reads as terrain with
-// geography rather than as one flat-shaded mass.
+// Lush land seen from the air: shorelines, grassland, forested slopes, bare
+// rock and snow on the peaks. Height and steepness drive the palette, which
+// is what makes terrain read as geography rather than as one tinted mass.
 export const TerrainMaterial = shaderMaterial(
   {
     uTime: 0,
     uReveal: 0,
-    uLow: new THREE.Color("#2a0f4d"),
-    uMid: new THREE.Color("#1b2a63"),
-    uHigh: new THREE.Color("#8fa8e8"),
-    uGlow: new THREE.Color("#ff4fb0"),
-    uFogColor: new THREE.Color("#1a0d3a"),
-    uMaxHeight: 62,
+    uSand: new THREE.Color("#e0cf9c"),
+    uGrass: new THREE.Color("#5aa83f"),
+    uDeepGrass: new THREE.Color("#24622b"),
+    uRock: new THREE.Color("#6f6455"),
+    uSnow: new THREE.Color("#f2f7fa"),
+    uFogColor: new THREE.Color("#a9c9e0"),
+    uMaxHeight: 78,
+    uWaterHeight: 9,
   },
   /* glsl */ `
     varying vec3 vNormalW;
@@ -32,39 +34,70 @@ export const TerrainMaterial = shaderMaterial(
   /* glsl */ `
     uniform float uTime;
     uniform float uReveal;
-    uniform vec3 uLow;
-    uniform vec3 uMid;
-    uniform vec3 uHigh;
-    uniform vec3 uGlow;
+    uniform vec3 uSand;
+    uniform vec3 uGrass;
+    uniform vec3 uDeepGrass;
+    uniform vec3 uRock;
+    uniform vec3 uSnow;
     uniform vec3 uFogColor;
     uniform float uMaxHeight;
+    uniform float uWaterHeight;
 
     varying vec3 vNormalW;
     varying vec3 vPos;
     varying float vDepth;
 
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    }
+
+    float noise(vec2 p) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      f = f * f * (3.0 - 2.0 * f);
+      return mix(
+        mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
+        mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
+        f.y
+      );
+    }
+
     void main() {
       vec3 N = normalize(vNormalW);
-      vec3 L = normalize(vec3(-0.4, 0.35, 0.85));
+      // sun high and to one side, warm
+      vec3 L = normalize(vec3(-0.45, 0.3, 0.84));
       float lambert = max(dot(N, L), 0.0);
+      float sky = 0.35 + 0.65 * max(N.z, 0.0); // ambient from the sky above
 
-      float h = clamp(vPos.z / uMaxHeight, -0.3, 1.0);
+      float h = vPos.z;
+      // flat ground is grass, steep faces are exposed rock
+      float steep = 1.0 - clamp(N.z, 0.0, 1.0);
 
-      vec3 col = mix(uLow, uMid, smoothstep(-0.1, 0.35, h));
-      col = mix(col, uHigh, smoothstep(0.45, 0.95, h));
-      col *= 0.35 + lambert * 0.95;
+      // Patchiness so the greens are not a flat wash. NB "patch" is a
+      // reserved word in GLSL and will not compile as a variable name.
+      float mottle = noise(vPos.xy * 0.02) * 0.5 + noise(vPos.xy * 0.09) * 0.5;
 
-      // energy pooling in the basins, brightest at the lowest ground
-      float basin = smoothstep(0.12, -0.25, h);
-      float shimmer = 0.75 + 0.25 * sin(uTime * 0.7 + vPos.x * 0.05 + vPos.y * 0.04);
-      col += uGlow * basin * shimmer * (0.35 + 0.9 * uReveal);
+      vec3 col = mix(uGrass, uDeepGrass, mottle);
+      // shoreline sand just above the waterline
+      col = mix(uSand, col, smoothstep(uWaterHeight - 0.5, uWaterHeight + 6.0, h));
+      // rock as it rises
+      col = mix(col, uRock, smoothstep(0.42, 0.72, h / uMaxHeight));
+      // exposed rock wherever it is too steep to hold soil
+      col = mix(col, uRock, smoothstep(0.45, 0.8, steep));
+      // snow caps
+      col = mix(col, uSnow, smoothstep(0.78, 0.95, h / uMaxHeight) * (1.0 - steep * 0.5));
 
-      // crests catch the light
-      float crest = smoothstep(0.7, 1.0, h) * pow(max(dot(N, L), 0.0), 3.0);
-      col += uHigh * crest * 0.5;
+      col *= 0.34 * sky + lambert * 1.15;
 
-      float fog = 1.0 - exp(-vDepth * 0.0075);
-      col = mix(col, uFogColor, clamp(fog, 0.0, 0.95));
+      // Aerial perspective sells altitude, but too much of it bleaches the
+      // whole map to pale grey-green — it needs to bite only in the far
+      // distance, and never fully.
+      float fog = 1.0 - exp(-vDepth * 0.00085);
+      col = mix(col, uFogColor, clamp(fog, 0.0, 0.68));
+
+      // the land's colour comes up as the player falls into the world
+      float lum = dot(col, vec3(0.299, 0.587, 0.114));
+      col = mix(vec3(lum) * 0.5, col, 0.3 + 0.7 * uReveal);
 
       gl_FragColor = vec4(col, 1.0);
     }
