@@ -105,6 +105,11 @@ export function useFlightControls(): React.RefObject<FlightInput> {
       input.current.boosting = keys.has(" ") || keys.has("shift");
     }
 
+    // right-drag is a legitimate way to swing the camera round, and a context
+    // menu popping up mid-flight breaks it
+    const onContextMenu = (e: MouseEvent) => e.preventDefault();
+
+    window.addEventListener("contextmenu", onContextMenu);
     window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", endDrag);
@@ -113,6 +118,7 @@ export function useFlightControls(): React.RefObject<FlightInput> {
     window.addEventListener("keyup", onKeyUp);
 
     return () => {
+      window.removeEventListener("contextmenu", onContextMenu);
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", endDrag);

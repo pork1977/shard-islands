@@ -51,6 +51,7 @@ export default function PlayerGlider() {
   const lookTarget = useMemo(() => new THREE.Vector3(), []);
   const lookAt = useMemo(() => new THREE.Vector3(), []);
   const boom = useMemo(() => new THREE.Vector3(), []);
+  const smoothed = useRef({ turn: 0, pitch: 0 });
   const basis = useMemo(() => new THREE.Matrix4(), []);
 
   useFrame((state, rawDelta) => {
@@ -65,16 +66,24 @@ export default function PlayerGlider() {
     // Steering is damped rather than applied directly: raw input straight
     // into the heading makes the craft feel twitchy and toy-like, and the
     // damping is what gives it the weight of a glider.
-    const turnTarget = -inp.turn * 1.6;
-    // inverted: drag down / press S to pull the nose UP, like a flight stick
-    const pitchTarget = inp.pitch * 1.0;
+    // A key is instantly at full deflection where a drag arrives gradually,
+    // which is what made keyboard flying feel twitchy. Easing the input
+    // itself gives the stick some travel instead of an on/off switch.
+    smoothed.current.turn +=
+      (inp.turn - smoothed.current.turn) * Math.min(1, dt * 3.2);
+    smoothed.current.pitch +=
+      (inp.pitch - smoothed.current.pitch) * Math.min(1, dt * 3.0);
 
-    p.yaw += (turnTarget - 0) * dt * FLIGHT.turnDamping * 0.35;
-    p.pitch += (pitchTarget - p.pitch) * dt * FLIGHT.turnDamping;
-    p.pitch = THREE.MathUtils.clamp(p.pitch, -1.1, 1.1);
+    const turnTarget = -smoothed.current.turn * 1.0;
+    // inverted: drag down / press S to pull the nose UP, like a flight stick
+    const pitchTarget = smoothed.current.pitch * 0.62;
+
+    p.yaw += turnTarget * dt * 1.35;
+    p.pitch += (pitchTarget - p.pitch) * dt * 3.0;
+    p.pitch = THREE.MathUtils.clamp(p.pitch, -0.9, 0.9);
 
     // bank into the turn — reads as aerodynamic rather than sliding sideways
-    const rollTarget = -inp.turn * 0.85;
+    const rollTarget = -smoothed.current.turn * 0.85;
     p.roll += (rollTarget - p.roll) * dt * 4.0;
 
     // diving gains speed, climbing bleeds it
