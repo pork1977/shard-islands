@@ -22,6 +22,7 @@ export const ShardGlassMaterial = shaderMaterial(
     ...glassUniformDefaults(),
     uGlowColor: new THREE.Color("#5fe4ff"),
     uProgress: 0,
+    uCollapse: 0,
     uImpact: new THREE.Vector2(0, 0),
   },
   /* glsl */ `
@@ -34,6 +35,8 @@ export const ShardGlassMaterial = shaderMaterial(
     attribute float aDist;
 
     uniform float uProgress;
+    /** Seconds since the pane gave way. 0 while it is merely cracked. */
+    uniform float uCollapse;
     uniform vec2 uImpact;
 
     varying vec2 vPaneUv;
@@ -45,6 +48,7 @@ export const ShardGlassMaterial = shaderMaterial(
     varying float vDist;
     varying float vCracked;
     varying float vFlash;
+    varying float vFall;
 
     // When this particular shard breaks.
     //
@@ -70,6 +74,13 @@ export const ShardGlassMaterial = shaderMaterial(
       return floor(raw * bursts) / bursts;
     }
 
+    // Rodrigues rotation — each shard tumbles about its own centre.
+    vec3 rotateAxis(vec3 v, vec3 axis, float angle) {
+      float c = cos(angle);
+      float s = sin(angle);
+      return v * c + cross(axis, v) * s + axis * dot(axis, v) * (1.0 - c);
+    }
+
     void main() {
       vPaneUv = aPaneUv;
       vCentroidUv = aCentroidUv;
@@ -90,6 +101,35 @@ export const ShardGlassMaterial = shaderMaterial(
       vec3 pos = position;
       pos.xy = mix(pos.xy, aCentroid.xy, 0.0045 * vCracked);
 
+      // The pane gives way. Pieces at the strike are already loose and go
+      // first; the rest follow outward, so the floor falls away rather than
+      // dropping as one sheet.
+      float fall = max(0.0, uCollapse - (aDist * 0.5 + aRandom.x * 0.2));
+      vFall = fall;
+      if (fall > 0.0) {
+        vec3 local = pos - aCentroid;
+
+        vec3 axis = normalize(aRandom * 2.0 - 1.0 + vec3(0.0011, 0.0007, 0.0013));
+        float spin = fall * (1.3 + aRandom.z * 3.4);
+        local = rotateAxis(local, axis, spin);
+        // Rotate the NORMAL by the same amount, or the pieces spin without
+        // their shading ever changing and tumble as dead silhouettes instead
+        // of catching the light.
+        vNormal = rotateAxis(normal, axis, spin);
+
+        vec2 outward = aCentroid.xy - uImpact;
+        vec3 dir = vec3(outward / (length(outward) + 0.001), 0.0);
+
+        // blast hardest at the strike, and everything falls away from the
+        // viewer into the void the camera is about to follow it into
+        vec3 velocity =
+            dir * (1.5 - aDist * 0.9) * (0.5 + aRandom.y)
+          + vec3(0.0, 0.0, -2.0 - aRandom.z * 2.2);
+        vec3 displacement = velocity * fall + vec3(0.0, 0.0, -7.0) * fall * fall;
+
+        pos = aCentroid + local + displacement;
+      }
+
       gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
     }
   `,
@@ -106,6 +146,7 @@ export const ShardGlassMaterial = shaderMaterial(
     varying float vDist;
     varying float vCracked;
     varying float vFlash;
+    varying float vFall;
 
     ${GLASS_HELPERS_GLSL}
 
@@ -173,6 +214,19 @@ export const ShardGlassMaterial = shaderMaterial(
       float side = 1.0 - step(0.5, abs(vNormal.z));
       vec3 cutCol = uGlassColor * 0.6 + uLightColor * 0.25 + uGlowColor * exp(-vDist * 3.0) * 0.55;
       col = mix(col, cutCol, side * vCracked);
+
+      // A tumbling piece is lit from two places: the cold source above, which
+      // it flashes as it spins through the right angle, and the glow rising
+      // from the void it is falling into.
+      if (vFall > 0.0) {
+        vec3 N = normalize(vNormal);
+        vec3 L = normalize(vec3(-0.35, 0.5, 0.78));
+        float glint = pow(max(dot(N, L), 0.0), 26.0);
+        col += uLightColor * glint * 1.5;
+        col += uGlowColor * max(0.0, -N.z) * 0.32;
+        // and it recedes into the dark as it falls away
+        col *= 1.0 / (1.0 + vFall * 0.55);
+      }
 
       gl_FragColor = vec4(col, 1.0);
     }

@@ -5,6 +5,7 @@ import { Canvas } from "@react-three/fiber";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import GlassFloor from "./GlassFloor";
 import FractureScene from "./FractureScene";
+import VoidBackdrop from "./VoidBackdrop";
 import { generateFrostedGlassNormalTexture } from "@/lib/textures/frostedGlassNormal";
 import { useGameStore } from "@/lib/store/useGameStore";
 
@@ -13,11 +14,15 @@ function Stage() {
   // keeps exactly the same surface texture
   const normalMap = useMemo(() => generateFrostedGlassNormalTexture(), []);
   const phase = useGameStore((s) => s.phase);
+  const impact = useGameStore((s) => s.impact);
 
-  return phase === "landing" ? (
-    <GlassFloor normalMap={normalMap} />
-  ) : (
-    <FractureScene normalMap={normalMap} />
+  if (phase === "landing") return <GlassFloor normalMap={normalMap} />;
+
+  return (
+    <>
+      <VoidBackdrop impact={impact ? [impact[0], impact[1]] : [0, 0]} />
+      <FractureScene normalMap={normalMap} />
+    </>
   );
 }
 
