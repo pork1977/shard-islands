@@ -66,9 +66,12 @@ export default function FractureScene({ normalMap }: { normalMap: THREE.Texture 
     [impact2D, viewport.width, viewport.height],
   );
 
-  useFrame((state) => {
+  useFrame((state, rawDelta) => {
     const mat = materialRef.current;
     if (!mat) return;
+
+    // clamped so a stalled frame cannot fling the descent sideways
+    const dt = Math.min(rawDelta, 1 / 20);
 
     mat.uTime = state.clock.elapsedTime;
     mat.uAspect = viewport.width / viewport.height;
@@ -135,7 +138,7 @@ export default function FractureScene({ normalMap }: { normalMap: THREE.Texture 
       // Field of view widens as the fall accelerates. Falling through open
       // air has almost no visual cue for speed, and the FOV kick is what
       // makes the drop feel fast rather than merely long.
-      const cam = state.camera as THREE.PerspectiveCamera;
+      const cam = state.camera as unknown as THREE.PerspectiveCamera;
       cam.fov = THREE.MathUtils.lerp(50, 88, Math.pow(p, 1.3));
       cam.updateProjectionMatrix();
     }

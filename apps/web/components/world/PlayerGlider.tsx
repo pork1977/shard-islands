@@ -169,7 +169,7 @@ export default function PlayerGlider() {
     // Ease the field of view back down from the wide angle the fall left it
     // at, then let speed nudge it — going faster should feel like going
     // faster, not just move the scenery quicker.
-    const cam = state.camera as THREE.PerspectiveCamera;
+    const cam = state.camera as unknown as THREE.PerspectiveCamera;
     const fovTarget = 62 + (p.speed / FLIGHT.baseForwardSpeed - 1) * 14;
     cam.fov += (fovTarget - cam.fov) * Math.min(1, dt * 2.2);
     cam.updateProjectionMatrix();
