@@ -19,6 +19,17 @@ export interface LivePlayerState {
   roll: number;
   speed: number;
   boosting: boolean;
+  /**
+   * Recent trail points, flat xyz, oldest first.
+   *
+   * Appended by ARC LENGTH rather than per frame, so the trail's resolution
+   * and its memory cost are independent of frame rate — and so the same
+   * buffer can be broadcast without flooding the wire when someone's frame
+   * rate is high.
+   */
+  trail: number[];
+  /** How much trail the player has earned; drives length and thickness. */
+  trailLength: number;
 }
 
 export const playerState: LivePlayerState = {
@@ -30,6 +41,8 @@ export const playerState: LivePlayerState = {
   roll: 0,
   speed: 0,
   boosting: false,
+  trail: [],
+  trailLength: 26,
 };
 
 export function resetPlayerState(position: Vec3Tuple, yaw: number) {
@@ -41,4 +54,30 @@ export function resetPlayerState(position: Vec3Tuple, yaw: number) {
   playerState.roll = 0;
   playerState.speed = 0;
   playerState.boosting = false;
+  playerState.trail = [];
+  playerState.trailLength = 26;
+}
+
+/**
+ * Appends to the trail only once the player has actually travelled far
+ * enough, and drops the oldest points past the earned length.
+ */
+export function pushTrailPoint(
+  state: LivePlayerState,
+  spacing: number,
+  maxPoints: number,
+) {
+  const t = state.trail;
+  const [x, y, z] = state.position;
+
+  if (t.length >= 3) {
+    const dx = x - t[t.length - 3];
+    const dy = y - t[t.length - 2];
+    const dz = z - t[t.length - 1];
+    if (dx * dx + dy * dy + dz * dz < spacing * spacing) return;
+  }
+
+  t.push(x, y, z);
+  const excess = t.length / 3 - maxPoints;
+  if (excess > 0) t.splice(0, Math.ceil(excess) * 3);
 }

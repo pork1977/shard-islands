@@ -6,14 +6,15 @@ import * as THREE from "three";
 import { generateGlider } from "@/lib/world/generateGlider";
 import { GliderCraftMaterial } from "@/lib/shaders/gliderCraft";
 import { useFlightControls } from "@/components/controllers/useFlightControls";
-import { playerState } from "@/lib/net/playerState";
+import { playerState, pushTrailPoint } from "@/lib/net/playerState";
+import TrailRibbon from "./TrailRibbon";
 import {
   terrainHeightAt,
   TERRAIN_BASE_Z,
   TERRAIN_SIZE,
   FLIGHT_ALTITUDE,
 } from "@/lib/world/generateTerrain";
-import { FLIGHT } from "@shard-islands/shared";
+import { FLIGHT, TRAIL } from "@shard-islands/shared";
 
 extend({ GliderCraftMaterial });
 
@@ -143,6 +144,9 @@ export default function PlayerGlider() {
     }
     p.position[2] = Math.min(p.position[2], CEILING);
 
+    // arc-length sampled, so trail resolution does not depend on frame rate
+    pushTrailPoint(p, TRAIL.pointSpacingMeters * 2.2, Math.round(p.trailLength));
+
     const group = groupRef.current;
     if (!group) return;
 
@@ -206,15 +210,21 @@ export default function PlayerGlider() {
   });
 
   return (
-    <group ref={groupRef}>
-      <mesh geometry={geometry}>
-        <gliderCraftMaterial
-          ref={craftMaterialRef}
-          transparent
-          depthWrite={false}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-    </group>
+    <>
+      <group ref={groupRef}>
+        <mesh geometry={geometry}>
+          <gliderCraftMaterial
+            ref={craftMaterialRef}
+            transparent
+            depthWrite={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      </group>
+
+      {/* the trail lives in world space — parenting it to the craft would
+          drag the whole tail around every time the nose turns */}
+      <TrailRibbon points={() => playerState.trail} width={TRAIL.baseThickness * 1.15} />
+    </>
   );
 }
