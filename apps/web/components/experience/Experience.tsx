@@ -9,7 +9,7 @@ export default function Experience() {
     <Canvas camera={{ position: [0, 0, 5], fov: 50 }} dpr={[1, 2]}>
       <GlassFloor />
       <EffectComposer>
-        <Bloom intensity={0.8} luminanceThreshold={0.8} luminanceSmoothing={0.2} mipmapBlur />
+        <Bloom intensity={0.45} luminanceThreshold={0.9} luminanceSmoothing={0.2} mipmapBlur />
       </EffectComposer>
     </Canvas>
   );
