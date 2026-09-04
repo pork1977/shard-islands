@@ -17,7 +17,12 @@ export const COLLAPSE_AT = CRACK_DURATION + 0.28;
 
 /** The camera starts falling just after the floor does, not with it. */
 export const PLUNGE_AT = COLLAPSE_AT + 0.12;
-export const PLUNGE_DURATION = 1.9;
+/**
+ * A long fall. The drop is the payoff for breaking the floor, and at ~2s it
+ * was over before it registered — this is the stretch where the player is
+ * falling through cloud watching a world resolve underneath them.
+ */
+export const PLUNGE_DURATION = 7.5;
 
 /** 0 while the pane is still whole, 1 once the camera is fully in the world. */
 export function revealAt(secondsSinceStrike: number): number {

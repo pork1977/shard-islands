@@ -8,12 +8,14 @@ export const TerrainMaterial = shaderMaterial(
   {
     uTime: 0,
     uReveal: 0,
-    uSand: new THREE.Color("#e0cf9c"),
-    uGrass: new THREE.Color("#5aa83f"),
-    uDeepGrass: new THREE.Color("#24622b"),
-    uRock: new THREE.Color("#6f6455"),
-    uSnow: new THREE.Color("#f2f7fa"),
-    uFogColor: new THREE.Color("#a9c9e0"),
+    // saturated, stylised, high-key — a map read from the air
+    uSand: new THREE.Color("#e8d9a4"),
+    uGrass: new THREE.Color("#63bd45"),
+    uDeepGrass: new THREE.Color("#2b7a34"),
+    uMeadow: new THREE.Color("#9dc95a"),
+    uRock: new THREE.Color("#7d7466"),
+    uSnow: new THREE.Color("#f4f9fc"),
+    uFogColor: new THREE.Color("#b6d4ea"),
     uMaxHeight: 78,
     uWaterHeight: 9,
   },
@@ -37,6 +39,7 @@ export const TerrainMaterial = shaderMaterial(
     uniform vec3 uSand;
     uniform vec3 uGrass;
     uniform vec3 uDeepGrass;
+    uniform vec3 uMeadow;
     uniform vec3 uRock;
     uniform vec3 uSnow;
     uniform vec3 uFogColor;
@@ -73,21 +76,39 @@ export const TerrainMaterial = shaderMaterial(
       // flat ground is grass, steep faces are exposed rock
       float steep = 1.0 - clamp(N.z, 0.0, 1.0);
 
-      // Patchiness so the greens are not a flat wash. NB "patch" is a
-      // reserved word in GLSL and will not compile as a variable name.
-      float mottle = noise(vPos.xy * 0.02) * 0.5 + noise(vPos.xy * 0.09) * 0.5;
+      // Biomes as distinct REGIONS with fairly crisp borders, not a smooth
+      // blend. Read from the air, that separation into readable areas —
+      // meadow, forest, farmland — is most of the stylised-map look; a soft
+      // gradient between greens just reads as one hazy field.
+      float biome = noise(vPos.xy * 0.0055);
+      float mottle = noise(vPos.xy * 0.021);
 
-      vec3 col = mix(uGrass, uDeepGrass, mottle);
+      vec3 col = uGrass;
+      // darker forested tracts
+      col = mix(col, uDeepGrass, smoothstep(0.46, 0.60, biome));
+      // drier meadow elsewhere
+      col = mix(col, uMeadow, smoothstep(0.44, 0.30, biome));
+      // patchwork within a region so it is not one flat colour
+      col = mix(col, col * 1.14, step(0.55, mottle));
+      col = mix(col, col * 0.88, step(0.62, noise(vPos.xy * 0.05 + 4.0)));
+
+      // canopy speckle in the forest, which is what tree cover reads as from
+      // altitude without placing a single tree
+      float canopy = noise(vPos.xy * 0.34);
+      col = mix(col, uDeepGrass * 0.72,
+                smoothstep(0.52, 0.58, biome) * smoothstep(0.45, 0.72, canopy) * 0.55);
+
       // shoreline sand just above the waterline
-      col = mix(uSand, col, smoothstep(uWaterHeight - 0.5, uWaterHeight + 6.0, h));
+      col = mix(uSand, col, smoothstep(uWaterHeight - 0.5, uWaterHeight + 7.0, h));
       // rock as it rises
-      col = mix(col, uRock, smoothstep(0.42, 0.72, h / uMaxHeight));
+      col = mix(col, uRock, smoothstep(0.5, 0.74, h / uMaxHeight));
       // exposed rock wherever it is too steep to hold soil
-      col = mix(col, uRock, smoothstep(0.45, 0.8, steep));
+      col = mix(col, uRock, smoothstep(0.5, 0.82, steep));
       // snow caps
-      col = mix(col, uSnow, smoothstep(0.78, 0.95, h / uMaxHeight) * (1.0 - steep * 0.5));
+      col = mix(col, uSnow, smoothstep(0.80, 0.94, h / uMaxHeight) * (1.0 - steep * 0.5));
 
-      col *= 0.34 * sky + lambert * 1.15;
+      // strong key light with a bright sky fill — flat, sunny and saturated
+      col *= 0.52 * sky + lambert * 1.05;
 
       // Aerial perspective sells altitude, but too much of it bleaches the
       // whole map to pale grey-green — it needs to bite only in the far

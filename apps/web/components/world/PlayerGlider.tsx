@@ -11,6 +11,7 @@ import {
   terrainHeightAt,
   TERRAIN_BASE_Z,
   TERRAIN_SIZE,
+  FLIGHT_ALTITUDE,
 } from "@/lib/world/generateTerrain";
 import { FLIGHT } from "@shard-islands/shared";
 
@@ -31,9 +32,10 @@ declare module "@react-three/fiber" {
 const UP = new THREE.Vector3(0, 0, 1);
 
 /** Where the world starts turning you back, and where it refuses outright. */
-const BOUNDARY_SOFT = TERRAIN_SIZE * 0.36;
-const BOUNDARY_HARD = TERRAIN_SIZE * 0.46;
-const CEILING = -12;
+const BOUNDARY_SOFT = TERRAIN_SIZE * 0.34;
+const BOUNDARY_HARD = TERRAIN_SIZE * 0.44;
+/** Enough headroom to climb without leaving the world behind. */
+const CEILING = FLIGHT_ALTITUDE + 120;
 
 export default function PlayerGlider() {
   const geometry = useMemo(() => generateGlider(), []);
@@ -163,6 +165,14 @@ export default function PlayerGlider() {
     lookAt.lerp(lookTarget, follow);
     state.camera.up.copy(UP);
     state.camera.lookAt(lookAt);
+
+    // Ease the field of view back down from the wide angle the fall left it
+    // at, then let speed nudge it — going faster should feel like going
+    // faster, not just move the scenery quicker.
+    const cam = state.camera as THREE.PerspectiveCamera;
+    const fovTarget = 62 + (p.speed / FLIGHT.baseForwardSpeed - 1) * 14;
+    cam.fov += (fovTarget - cam.fov) * Math.min(1, dt * 2.2);
+    cam.updateProjectionMatrix();
   });
 
   return (

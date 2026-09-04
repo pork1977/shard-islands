@@ -31,11 +31,15 @@ function fbm(x: number, y: number, octaves: number): number {
   return sum;
 }
 
-export const TERRAIN_SIZE = 900;
-export const TERRAIN_BASE_Z = -176;
-export const TERRAIN_MAX_HEIGHT = 78;
+export const TERRAIN_SIZE = 1400;
+/** Deep enough below the glass to give the fall real distance to cover. */
+export const TERRAIN_BASE_Z = -560;
+export const TERRAIN_MAX_HEIGHT = 105;
 /** Standing water fills anything below this height. */
-export const WATER_HEIGHT = 9;
+export const WATER_HEIGHT = 12;
+
+/** Where the fall ends and flight begins — comfortably above the peaks. */
+export const FLIGHT_ALTITUDE = TERRAIN_BASE_Z + TERRAIN_MAX_HEIGHT + 95;
 
 /**
  * The single source of truth for ground height, in terrain-local units.

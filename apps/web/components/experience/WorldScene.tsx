@@ -162,18 +162,21 @@ interface CloudSpec {
 function Clouds({ texture }: { texture: THREE.Texture }) {
   const specs = useMemo<CloudSpec[]>(() => {
     const out: CloudSpec[] = [];
-    for (let i = 0; i < 46; i++) {
+    // Layered decks through the whole descent, so the long fall keeps
+    // passing something. Density thins near the ground so the landscape is
+    // clear once flight begins.
+    for (let i = 0; i < 150; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const radius = 20 + Math.random() * 300;
+      const radius = Math.pow(Math.random(), 0.6) * 620;
+      const t = Math.random();
       out.push({
         position: [
           Math.cos(angle) * radius,
           Math.sin(angle) * radius,
-          // spread through the fall, clear of the ground
-          -18 - Math.random() * 110,
+          -25 - t * 420,
         ],
-        scale: 60 + Math.random() * 130,
-        opacity: 0.25 + Math.random() * 0.4,
+        scale: 90 + Math.random() * 230,
+        opacity: 0.2 + Math.random() * 0.45,
         rotation: Math.random() * Math.PI,
       });
     }

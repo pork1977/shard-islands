@@ -33,7 +33,7 @@ function Stage() {
 export default function Experience() {
   return (
     <>
-      <Canvas camera={{ position: [0, 0, 5], fov: 50, far: 2000 }} dpr={[1, 2]}>
+      <Canvas camera={{ position: [0, 0, 5], fov: 50, far: 5000 }} dpr={[1, 2]}>
         <color attach="background" args={["#04080e"]} />
         <Stage />
         <EffectComposer>

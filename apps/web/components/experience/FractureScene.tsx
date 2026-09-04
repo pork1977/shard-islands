@@ -8,6 +8,7 @@ import { generateVoronoiCells } from "@/lib/fracture/generateVoronoiCells";
 import { buildFractureGeometry } from "@/lib/fracture/fractureGeometry";
 import { useGameStore } from "@/lib/store/useGameStore";
 import { resetPlayerState } from "@/lib/net/playerState";
+import { FLIGHT_ALTITUDE } from "@/lib/world/generateTerrain";
 import {
   CRACK_DURATION,
   COLLAPSE_AT,
@@ -101,10 +102,15 @@ export default function FractureScene({ normalMap }: { normalMap: THREE.Texture 
       state.camera.position.set(
         THREE.MathUtils.lerp(0, impact2D[0] * 0.85, eased),
         THREE.MathUtils.lerp(0, impact2D[1] * 0.85, eased),
-        // deep enough to arrive among the islands rather than high above
-        // them, but still short of the first rock
-        THREE.MathUtils.lerp(5, -58, accel),
+        THREE.MathUtils.lerp(5, FLIGHT_ALTITUDE, accel),
       );
+
+      // Field of view widens as the fall accelerates. Falling through open
+      // air has almost no visual cue for speed, and the FOV kick is what
+      // makes the drop feel fast rather than merely long.
+      const cam = state.camera as THREE.PerspectiveCamera;
+      cam.fov = THREE.MathUtils.lerp(50, 88, Math.pow(p, 1.3));
+      cam.updateProjectionMatrix();
     }
   });
 

@@ -17,7 +17,9 @@ export default function ControlsHint() {
 
   useEffect(() => {
     if (phase !== "flying") return;
-    const t = setTimeout(() => setFaded(true), 9000);
+    // stays legible for a good while — the first version dimmed so far, so
+    // fast, that it was easy to miss the instructions were there at all
+    const t = setTimeout(() => setFaded(true), 25000);
     return () => clearTimeout(t);
   }, [phase]);
 
@@ -35,13 +37,19 @@ export default function ControlsHint() {
         userSelect: "none",
         fontFamily:
           "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
-        fontSize: 12,
-        lineHeight: 1.7,
+        fontSize: 13,
+        lineHeight: 2,
         letterSpacing: 0.3,
-        color: "rgba(255,255,255,0.92)",
-        textShadow: "0 1px 3px rgba(0,0,0,0.65)",
-        opacity: faded ? 0.32 : 1,
-        transition: "opacity 1.2s ease",
+        color: "#fff",
+        padding: "10px 14px",
+        borderRadius: 10,
+        background: "rgba(12,20,32,0.42)",
+        border: "1px solid rgba(255,255,255,0.18)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+        boxShadow: "0 4px 18px rgba(0,0,0,0.28)",
+        opacity: faded ? 0.62 : 1,
+        transition: "opacity 1.5s ease",
       }}
     >
       <div>
