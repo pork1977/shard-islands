@@ -24,7 +24,13 @@ declare module "@react-three/fiber" {
   }
 }
 
-function GlassPane({ normalMap }: { normalMap: THREE.Texture }) {
+export function GlassPane({
+  normalMap,
+  interactive = true,
+}: {
+  normalMap: THREE.Texture;
+  interactive?: boolean;
+}) {
   const materialRef = useRef<InstanceType<typeof GlassFloorMaterial>>(null);
   const { viewport } = useThree();
   const strike = useGameStore((s) => s.strike);
@@ -40,10 +46,14 @@ function GlassPane({ normalMap }: { normalMap: THREE.Texture }) {
       scale={[viewport.width, viewport.height, 1]}
       // The whole pane is the target, not just the handprint — a small child
       // smacking anywhere on the screen has to work.
-      onPointerDown={(e) => {
-        e.stopPropagation();
-        strike([e.point.x, e.point.y, e.point.z]);
-      }}
+      onPointerDown={
+        interactive
+          ? (e) => {
+              e.stopPropagation();
+              strike([e.point.x, e.point.y, e.point.z]);
+            }
+          : undefined
+      }
     >
       <planeGeometry args={[1, 1]} />
       <glassFloorMaterial ref={materialRef} uNormalMap={normalMap} />
