@@ -8,11 +8,14 @@ export const SkyMaterial = shaderMaterial(
   {
     uTime: 0,
     uReveal: 0,
-    uZenith: new THREE.Color("#2f7fd4"),
-    uHorizon: new THREE.Color("#cfe6f5"),
-    uSunColor: new THREE.Color("#fff2cf"),
-    uCloud: new THREE.Color("#ffffff"),
-    uSunDir: new THREE.Vector3(-0.45, 0.3, 0.84).normalize(),
+    // Dusk. The trail is the game's scoreboard, and a glowing ribbon needs
+    // a dim sky to read against — under midday blue it washed out to white.
+    uZenith: new THREE.Color("#131a4a"),
+    uHorizon: new THREE.Color("#e8794a"),
+    uSunColor: new THREE.Color("#ffb066"),
+    uCloud: new THREE.Color("#8a6f9c"),
+    // sun sitting low, so the light rakes across the land
+    uSunDir: new THREE.Vector3(-0.72, 0.28, 0.16).normalize(),
   },
   /* glsl */ `
     varying vec3 vDir;
@@ -56,9 +59,11 @@ export const SkyMaterial = shaderMaterial(
     void main() {
       vec3 d = normalize(vDir);
 
-      // +Z is up in this world (the glass floor was looked down through -Z)
-      float up = clamp(d.z * 0.5 + 0.5, 0.0, 1.0);
-      vec3 col = mix(uHorizon, uZenith, pow(up, 0.8));
+      // +Z is up in this world (the glass floor was looked down through -Z).
+      // The warm band is kept tight to the horizon — spread across the whole
+      // dome it just reads as an orange ceiling rather than a sunset.
+      float horizonBand = smoothstep(0.42, -0.05, d.z);
+      vec3 col = mix(uZenith, uHorizon, horizonBand);
 
       // sun and its haze
       float sun = max(dot(d, normalize(uSunDir)), 0.0);
@@ -71,8 +76,12 @@ export const SkyMaterial = shaderMaterial(
       float cover = smoothstep(0.48, 0.78, c) * smoothstep(0.02, 0.35, d.z);
       col = mix(col, uCloud * (0.85 + sun * 0.3), cover * 0.85);
 
+      // stars, only where the sky is dark and clear of cloud
+      float star = pow(hash(floor(d * 340.0)), 260.0);
+      col += vec3(0.85, 0.9, 1.0) * star * smoothstep(0.25, 0.7, d.z) * (1.0 - cover) * 2.2;
+
       // below the horizon fades into the aerial haze the land sits in
-      col = mix(uHorizon * 0.92, col, smoothstep(-0.25, 0.06, d.z));
+      col = mix(uHorizon * 0.42, col, smoothstep(-0.25, 0.06, d.z));
 
       float lum = dot(col, vec3(0.299, 0.587, 0.114));
       col = mix(vec3(lum) * 0.55, col, 0.35 + 0.65 * uReveal);

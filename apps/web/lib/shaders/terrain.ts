@@ -15,7 +15,7 @@ export const TerrainMaterial = shaderMaterial(
     uMeadow: new THREE.Color("#9dc95a"),
     uRock: new THREE.Color("#7d7466"),
     uSnow: new THREE.Color("#f4f9fc"),
-    uFogColor: new THREE.Color("#b6d4ea"),
+    uFogColor: new THREE.Color("#6a4a6e"),
     uMaxHeight: 78,
     uWaterHeight: 9,
     uRoadColor: new THREE.Color("#9c8a6b"),
@@ -80,8 +80,8 @@ export const TerrainMaterial = shaderMaterial(
 
     void main() {
       vec3 N = normalize(vNormalW);
-      // sun high and to one side, warm
-      vec3 L = normalize(vec3(-0.45, 0.3, 0.84));
+      // low dusk sun, matching the sky's own sun direction
+      vec3 L = normalize(vec3(-0.72, 0.28, 0.16));
       float lambert = max(dot(N, L), 0.0);
       float sky = 0.35 + 0.65 * max(N.z, 0.0); // ambient from the sky above
 
@@ -147,8 +147,12 @@ export const TerrainMaterial = shaderMaterial(
       road *= 1.0 - smoothstep(0.25, 0.5, steep);
       col = mix(col, uRoadColor, road * 0.85);
 
-      // strong key light with a bright sky fill — flat, sunny and saturated
-      col *= 0.52 * sky + lambert * 1.05;
+      // Dusk lighting: a cool dim ambient with a warm raking key, so lit
+      // slopes go golden and shaded ones fall to deep blue. Much darker
+      // overall, which is what lets neon read against it.
+      vec3 ambient = vec3(0.20, 0.24, 0.40) * sky * 0.85;
+      vec3 key = vec3(1.0, 0.72, 0.45) * lambert * 1.15;
+      col *= ambient + key;
 
       // Aerial perspective sells altitude, but too much of it bleaches the
       // whole map to pale grey-green — it needs to bite only in the far

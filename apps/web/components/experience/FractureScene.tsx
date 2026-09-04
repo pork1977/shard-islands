@@ -114,9 +114,8 @@ export default function FractureScene({ normalMap }: { normalMap: THREE.Texture 
       // as something happening TO them before it becomes theirs.
       const authority = THREE.MathUtils.clamp((p - 0.06) * 4, 0, 1);
       const drift = driftRef.current;
-      // pitch inverted to match flight: drag down to go "up" the screen
       drift.vx += -input.current.turn * authority * dt * 26;
-      drift.vy += input.current.pitch * authority * dt * 26;
+      drift.vy += -input.current.pitch * authority * dt * 26;
       drift.vx *= Math.pow(0.12, dt); // air resistance, so it settles
       drift.vy *= Math.pow(0.12, dt);
       drift.x += drift.vx * dt;

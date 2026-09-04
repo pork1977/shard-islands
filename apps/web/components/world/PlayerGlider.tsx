@@ -53,6 +53,7 @@ export default function PlayerGlider() {
   const lookAt = useMemo(() => new THREE.Vector3(), []);
   const boom = useMemo(() => new THREE.Vector3(), []);
   const smoothed = useRef({ turn: 0, pitch: 0 });
+  const zoomShown = useRef(1);
   const basis = useMemo(() => new THREE.Matrix4(), []);
 
   useFrame((state, rawDelta) => {
@@ -76,8 +77,8 @@ export default function PlayerGlider() {
       (inp.pitch - smoothed.current.pitch) * Math.min(1, dt * 3.0);
 
     const turnTarget = -smoothed.current.turn * 1.0;
-    // inverted: drag down / press S to pull the nose UP, like a flight stick
-    const pitchTarget = smoothed.current.pitch * 0.62;
+    // back to the original sense: press W / drag up to point the nose up
+    const pitchTarget = -smoothed.current.pitch * 0.62;
 
     p.yaw += turnTarget * dt * 1.35;
     p.pitch += (pitchTarget - p.pitch) * dt * 3.0;
@@ -183,10 +184,14 @@ export default function PlayerGlider() {
       .addScaledVector(up, Math.sin(lp))
       .normalize();
 
+    // wheel zoom, eased so a flick of the wheel does not snap the camera
+    zoomShown.current += (inp.zoom - zoomShown.current) * Math.min(1, dt * 6);
+    const dist = 7.5 * zoomShown.current;
+
     camTarget
       .set(p.position[0], p.position[1], p.position[2])
-      .addScaledVector(boom, 7.5)
-      .addScaledVector(up, 2.3);
+      .addScaledVector(boom, dist)
+      .addScaledVector(up, 2.3 * zoomShown.current);
     lookTarget
       .set(p.position[0], p.position[1], p.position[2])
       .addScaledVector(forward, 9 * Math.max(0.15, Math.cos(ly)));

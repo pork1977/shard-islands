@@ -217,7 +217,8 @@ function Clouds({ texture }: { texture: THREE.Texture }) {
             map={texture}
             transparent
             opacity={c.opacity}
-            color="#ffffff"
+            // dusk-lit cloud, catching the low sun from underneath
+            color="#c99ab0"
             depthWrite={false}
             side={THREE.DoubleSide}
           />
@@ -236,8 +237,8 @@ export default function WorldScene() {
       {/* Everything else is hand-lit in its own shader, but the instanced
           buildings and trees use a standard material, which needs real
           lights. Matched to the sun direction baked into the shaders. */}
-      <ambientLight intensity={1.5} />
-      <directionalLight position={[-90, 70, 170]} intensity={2.2} />
+      <ambientLight intensity={0.55} color="#5a6ba8" />
+      <directionalLight position={[-160, 62, 36]} intensity={1.5} color="#ffb06e" />
 
       <Sky reveal={reveal} />
       <Land reveal={reveal} />

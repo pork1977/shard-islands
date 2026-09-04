@@ -11,6 +11,8 @@ export interface FlightInput {
   /** Camera orbit offsets in radians — look around WITHOUT steering. */
   lookYaw: number;
   lookPitch: number;
+  /** Chase-camera distance multiplier, driven by the wheel. */
+  zoom: number;
 }
 
 /**
@@ -29,6 +31,7 @@ export function useFlightControls(): React.RefObject<FlightInput> {
     boosting: false,
     lookYaw: 0,
     lookPitch: 0,
+    zoom: 1,
   });
 
   useEffect(() => {
@@ -65,9 +68,12 @@ export function useFlightControls(): React.RefObject<FlightInput> {
         input.current.turn = clamp(dx / r, -1, 1);
         input.current.pitch = clamp(dy / r, -1, 1);
       } else {
-        // free-look: full sweep across the window is a bit over half a turn
-        input.current.lookYaw = clamp(drag.baseYaw - dx * 0.005, -2.4, 2.4);
-        input.current.lookPitch = clamp(drag.basePitch - dy * 0.004, -0.9, 0.9);
+        // Yaw is deliberately UNCLAMPED so the camera can swing the whole way
+        // round the craft; a limit near half a turn makes it feel like it has
+        // hit a wall just as you go to look behind you.
+        input.current.lookYaw = drag.baseYaw - dx * 0.005;
+        // pitch stays limited, or the camera tumbles over the top
+        input.current.lookPitch = clamp(drag.basePitch - dy * 0.004, -1.15, 1.15);
       }
     };
 
@@ -109,7 +115,15 @@ export function useFlightControls(): React.RefObject<FlightInput> {
     // menu popping up mid-flight breaks it
     const onContextMenu = (e: MouseEvent) => e.preventDefault();
 
+    // wheel forward pulls the camera in, wheel back pushes it out
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const step = Math.exp(e.deltaY * 0.0012);
+      input.current.zoom = clamp(input.current.zoom * step, 0.35, 4.5);
+    };
+
     window.addEventListener("contextmenu", onContextMenu);
+    window.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", endDrag);
@@ -119,6 +133,7 @@ export function useFlightControls(): React.RefObject<FlightInput> {
 
     return () => {
       window.removeEventListener("contextmenu", onContextMenu);
+      window.removeEventListener("wheel", onWheel);
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", endDrag);
