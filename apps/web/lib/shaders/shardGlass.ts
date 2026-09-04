@@ -25,12 +25,14 @@ export const ShardGlassMaterial = shaderMaterial(
 
     varying vec2 vPaneUv;
     varying vec3 vNormal;
+    varying vec3 vRandom;
     varying float vEdge;
     varying float vDist;
 
     void main() {
       vPaneUv = aPaneUv;
       vNormal = normal;
+      vRandom = aRandom;
       vEdge = aEdge;
       vDist = aDist;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
@@ -42,13 +44,24 @@ export const ShardGlassMaterial = shaderMaterial(
 
     varying vec2 vPaneUv;
     varying vec3 vNormal;
+    varying vec3 vRandom;
     varying float vEdge;
     varying float vDist;
 
     ${GLASS_HELPERS_GLSL}
 
     void main() {
-      vec3 col = glassSurface(vPaneUv);
+      // THE thing that makes glass read as broken rather than merely drawn on:
+      // every piece has shifted and tilted a little in its socket, so the view
+      // through it no longer lines up with its neighbours. Sampling the light
+      // field at a per-shard offset makes the tile seams visibly jog at every
+      // crack. Without this the seams run dead straight under the cracks and
+      // the pane reads as intact with a pattern painted over it.
+      vec2 shardShift = (vRandom.xy - 0.5) * 0.03 * (1.0 - vDist * 0.55);
+      vec3 col = glassSurface(vPaneUv + shardShift);
+
+      // each piece now sits at its own angle, so it catches the light differently
+      col *= 0.86 + vRandom.z * 0.28;
 
       // aEdge runs 1 at the shard centre to 0 along its outline. Thresholding
       // it directly makes crack width proportional to shard size — huge gashes
@@ -58,14 +71,20 @@ export const ShardGlassMaterial = shaderMaterial(
       float crack = 1.0 - smoothstep(0.0, w * 1.4, vEdge);
       float bruise = 1.0 - smoothstep(0.0, w * 7.0, vEdge);
 
-      // glass either side of the split darkens, and the broken lip catches light
+      // glass either side of the split darkens, and the broken lip catches light.
+      // Brightness falls off from the strike and varies per shard — cracks lit
+      // uniformly across the whole pane read as decorative neon, not damage.
       col = mix(col, col * 0.45, bruise * 0.5);
-      col += uLightColor * crack * 0.3;
+      col += uLightColor * crack * (0.08 + 0.3 * exp(-vDist * 2.0)) * (0.6 + vRandom.x * 0.8);
 
       // light from the world beneath leaking up through the cracks, strongest
       // at the strike and fading outward
       float leak = crack * exp(-vDist * 3.0);
       col += uGlowColor * leak * 1.1;
+
+      // pulverised core right at the strike, where the glass is crushed rather
+      // than cleanly split
+      col += uGlowColor * exp(-vDist * 26.0) * 0.9;
 
       // exposed cut faces of the glass glow along their thickness
       float side = 1.0 - step(0.5, abs(vNormal.z));

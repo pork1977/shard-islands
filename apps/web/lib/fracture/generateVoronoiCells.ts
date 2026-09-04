@@ -52,41 +52,77 @@ export function generateVoronoiCells({
 
   const points: [number, number][] = [[ix, iy]];
 
+  const inPane = (x: number, y: number) =>
+    x > -halfW * 1.4 && x < halfW * 1.4 && y > -halfH * 1.4 && y < halfH * 1.4;
+
+  // Major radial fractures: the handful of long cracks that run from the
+  // strike right out to the edge of the pane. The polar lattice alone only
+  // produces short radial segments between adjacent rings, so these are
+  // forced explicitly — a pair of seed points straddling the ray puts a
+  // Voronoi boundary exactly ON the ray, and chaining pairs outward along it
+  // makes that boundary continuous for the full length of the crack.
+  const majorCount = 5 + Math.floor(Math.random() * 4);
+  const majorBase = Math.random() * Math.PI * 2;
+
+  for (let m = 0; m < majorCount; m++) {
+    const angle =
+      majorBase +
+      (m / majorCount) * Math.PI * 2 +
+      (Math.random() - 0.5) * 0.35;
+    const ux = Math.cos(angle);
+    const uy = Math.sin(angle);
+    // perpendicular, for offsetting the pair either side of the crack line
+    const px = -uy;
+    const py = ux;
+
+    let r = maxRadius * 0.03;
+    while (r < maxRadius * 1.2) {
+      const eps = r * 0.16;
+      const cxp = ix + ux * r;
+      const cyp = iy + uy * r;
+      if (inPane(cxp, cyp)) {
+        points.push([cxp + px * eps, cyp + py * eps]);
+        points.push([cxp - px * eps, cyp - py * eps]);
+      }
+      r *= 1.55;
+    }
+  }
+
   let spokes = 13;
   let radius = maxRadius * 0.022;
   const growth = 1.42;
   let ring = 0;
 
+  // ONE offset shared by every ring. Giving each ring its own random offset
+  // destroys the most important feature of impact fracture: long radial
+  // cracks spearing from the strike to the edge. Those exist because the
+  // radial cell boundaries of consecutive rings line up — which only happens
+  // if the rings share their spoke angles. Per-ring offsets produced a
+  // concentric doily instead.
+  const spokeOffset = Math.random() * Math.PI * 2;
+
   while (radius < maxRadius * 1.15 && points.length < maxCells) {
     // Widen the spoke count as rings grow, otherwise outer cells become
-    // absurdly long arcs. Doubling (rather than a smooth increase) keeps
-    // spokes aligned across rings so radial cracks stay continuous.
+    // absurdly long arcs. Doubling subdivides existing spokes rather than
+    // replacing them, so the original radial lines survive out to the edge.
     if (ring > 0 && ring % 3 === 0) spokes *= 2;
 
-    // per-ring angular offset so spokes aren't a perfectly rigid starburst
-    const ringOffset = Math.random() * Math.PI * 2;
     const angleStep = (Math.PI * 2) / spokes;
 
     for (let s = 0; s < spokes && points.length < maxCells; s++) {
-      // jitter scaled to local cell size, so it reads organic at every radius
-      const angleJitter = (Math.random() - 0.5) * angleStep * 0.55;
+      // Angular jitter kept small — enough to look organic, not enough to
+      // break the radial alignment that makes the long cracks read.
+      const angleJitter = (Math.random() - 0.5) * angleStep * 0.12;
       const radiusJitter = (Math.random() - 0.5) * radius * 0.42;
 
-      const angle = ringOffset + s * angleStep + angleJitter;
+      const angle = spokeOffset + s * angleStep + angleJitter;
       const r = radius + radiusJitter;
 
       const x = ix + Math.cos(angle) * r;
       const y = iy + Math.sin(angle) * r;
 
       // keep seeds a little outside the pane too, so edge cells close cleanly
-      if (
-        x > -halfW * 1.4 &&
-        x < halfW * 1.4 &&
-        y > -halfH * 1.4 &&
-        y < halfH * 1.4
-      ) {
-        points.push([x, y]);
-      }
+      if (inPane(x, y)) points.push([x, y]);
     }
 
     radius *= growth;
