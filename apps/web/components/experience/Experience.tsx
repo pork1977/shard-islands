@@ -6,6 +6,7 @@ import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import GlassFloor from "./GlassFloor";
 import FractureScene from "./FractureScene";
 import WorldScene from "./WorldScene";
+import PlayerGlider from "@/components/world/PlayerGlider";
 import { generateFrostedGlassNormalTexture } from "@/lib/textures/frostedGlassNormal";
 import { generateWorld } from "@/lib/world/generateWorld";
 import { useGameStore } from "@/lib/store/useGameStore";
@@ -29,7 +30,9 @@ function Stage() {
   return (
     <>
       <WorldScene world={world} impact={impact2D} />
-      <FractureScene normalMap={normalMap} />
+      {/* the broken pane stays mounted while it is still falling away */}
+      {phase === "fracturing" && <FractureScene normalMap={normalMap} />}
+      {phase === "flying" && <PlayerGlider />}
     </>
   );
 }

@@ -17,6 +17,8 @@ interface GameState {
    */
   strikeAt: number;
   strike: (impact: Vec3Tuple) => void;
+  /** Control passes to the player once the fall is over. */
+  beginFlight: () => void;
   reset: () => void;
 }
 
@@ -26,5 +28,6 @@ export const useGameStore = create<GameState>((set) => ({
   strikeAt: 0,
   strike: (impact) =>
     set({ phase: "fracturing", impact, strikeAt: performance.now() }),
+  beginFlight: () => set((s) => (s.phase === "fracturing" ? { phase: "flying" } : s)),
   reset: () => set({ phase: "landing", impact: null, strikeAt: 0 }),
 }));

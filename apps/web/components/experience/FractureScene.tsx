@@ -7,6 +7,7 @@ import { ShardGlassMaterial } from "@/lib/shaders/shardGlass";
 import { generateVoronoiCells } from "@/lib/fracture/generateVoronoiCells";
 import { buildFractureGeometry } from "@/lib/fracture/fractureGeometry";
 import { useGameStore } from "@/lib/store/useGameStore";
+import { resetPlayerState } from "@/lib/net/playerState";
 import {
   CRACK_DURATION,
   COLLAPSE_AT,
@@ -39,6 +40,7 @@ export default function FractureScene({ normalMap }: { normalMap: THREE.Texture 
   const { viewport } = useThree();
   const impact = useGameStore((s) => s.impact);
   const strikeAt = useGameStore((s) => s.strikeAt);
+  const beginFlight = useGameStore((s) => s.beginFlight);
 
   const impact2D = useMemo<[number, number]>(
     () => (impact ? [impact[0], impact[1]] : [0, 0]),
@@ -80,15 +82,28 @@ export default function FractureScene({ normalMap }: { normalMap: THREE.Texture 
     // toward the strike point so the plunge goes through the opening rather
     // than through intact glass.
     const p = THREE.MathUtils.clamp((t - PLUNGE_AT) / PLUNGE_DURATION, 0, 1);
+
+    // The fall does not end in a stop — it hands straight over to the player,
+    // seeded with the position and heading the plunge arrived at so control
+    // begins exactly where the camera already is.
+    if (p >= 1) {
+      resetPlayerState(
+        [state.camera.position.x, state.camera.position.y, state.camera.position.z],
+        0,
+      );
+      beginFlight();
+      return;
+    }
+
     if (p > 0) {
       const eased = p * p * (3 - 2 * p); // smoothstep: eases in, then commits
       const accel = Math.pow(p, 1.7); // and keeps accelerating downward
       state.camera.position.set(
         THREE.MathUtils.lerp(0, impact2D[0] * 0.85, eased),
         THREE.MathUtils.lerp(0, impact2D[1] * 0.85, eased),
-        // stops short of the island field, so the fall ends looking out over
-        // the world rather than buried inside the nearest rock
-        THREE.MathUtils.lerp(5, -19, accel),
+        // deep enough to arrive among the islands rather than high above
+        // them, but still short of the first rock
+        THREE.MathUtils.lerp(5, -58, accel),
       );
     }
   });

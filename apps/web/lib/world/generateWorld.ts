@@ -59,14 +59,16 @@ export function generateWorld(seed = 1337): WorldSpec {
   const random = rand(seed);
   const islands: IslandSpec[] = [];
 
-  const COUNT = 15;
+  const COUNT = 26;
   for (let i = 0; i < COUNT; i++) {
     // Spread down the fall axis, holding a clear corridor around it. The
     // camera plunges to roughly z -34, so islands must stand off to the sides
     // there or it simply ends up inside one with rock filling the frame.
-    const depth = -34 - (i / COUNT) * 110 - random() * 9;
+    // Spread through the altitudes the player will actually fly at, holding a
+    // clear radius around the fall line so the plunge lands in open air.
+    const depth = -40 - (i / COUNT) * 105 - random() * 9;
     const angle = random() * Math.PI * 2;
-    const radius = 7 + random() * 15;
+    const radius = 14 + random() * 34;
 
     const scale = 1.8 + random() * 4.0;
     const fallCount = Math.floor(random() * 3);
@@ -90,16 +92,19 @@ export function generateWorld(seed = 1337): WorldSpec {
   // as huge mirror fragments — the kaleidoscope layer from the world design.
   const mirrors: MirrorSpec[] = [];
   for (let i = 0; i < 7; i++) {
+    // Held high above the flight altitude — these are the underside of the
+    // shattered floor hanging in the sky, not obstacles to fly into. Left in
+    // the flight band they just sail past the camera as coloured slabs.
     const angle = random() * Math.PI * 2;
-    const radius = 8 + random() * 16;
+    const radius = 30 + random() * 55;
     mirrors.push({
       position: [
         Math.cos(angle) * radius,
         Math.sin(angle) * radius * 0.8,
-        -18 - random() * 60,
+        -4 - random() * 22,
       ],
       rotation: [random() * Math.PI, random() * Math.PI, random() * Math.PI],
-      scale: [4 + random() * 9, 4 + random() * 9],
+      scale: [10 + random() * 22, 10 + random() * 22],
       spin: (random() - 0.5) * 0.12,
       tint: VEIN_PALETTE[Math.floor(random() * VEIN_PALETTE.length)],
     });

@@ -5,11 +5,13 @@ import { extend, useFrame, type ThreeElements } from "@react-three/fiber";
 import * as THREE from "three";
 import { CrystalIslandMaterial } from "@/lib/shaders/crystalIsland";
 import { NebulaMaterial } from "@/lib/shaders/nebula";
+import { TerrainMaterial } from "@/lib/shaders/terrain";
+import { generateTerrain } from "@/lib/world/generateTerrain";
 import { useGameStore } from "@/lib/store/useGameStore";
 import { revealAt } from "@/lib/timeline";
 import type { WorldSpec, IslandSpec, MirrorSpec } from "@/lib/world/generateWorld";
 
-extend({ CrystalIslandMaterial, NebulaMaterial });
+extend({ CrystalIslandMaterial, NebulaMaterial, TerrainMaterial });
 
 declare module "@react-three/fiber" {
   interface ThreeElements {
@@ -29,6 +31,16 @@ declare module "@react-three/fiber" {
       uViolet?: THREE.ColorRepresentation;
       uMagenta?: THREE.ColorRepresentation;
       uTeal?: THREE.ColorRepresentation;
+    };
+    terrainMaterial: ThreeElements["meshBasicMaterial"] & {
+      uTime?: number;
+      uReveal?: number;
+      uLow?: THREE.ColorRepresentation;
+      uMid?: THREE.ColorRepresentation;
+      uHigh?: THREE.ColorRepresentation;
+      uGlow?: THREE.ColorRepresentation;
+      uFogColor?: THREE.ColorRepresentation;
+      uMaxHeight?: number;
     };
   }
 }
@@ -96,6 +108,23 @@ function makeFallTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(canvas);
 }
 
+function Terrain({ reveal }: { reveal: React.RefObject<number> }) {
+  const materialRef = useRef<InstanceType<typeof TerrainMaterial>>(null);
+  const terrain = useMemo(() => generateTerrain(), []);
+
+  useFrame((state) => {
+    if (!materialRef.current) return;
+    materialRef.current.uTime = state.clock.elapsedTime;
+    materialRef.current.uReveal = reveal.current ?? 0;
+  });
+
+  return (
+    <mesh geometry={terrain.geometry} position={[0, 0, -172]}>
+      <terrainMaterial ref={materialRef} uMaxHeight={terrain.maxHeight} />
+    </mesh>
+  );
+}
+
 function Island({
   spec,
   fallTexture,
@@ -114,7 +143,12 @@ function Island({
   });
 
   return (
-    <group position={spec.position} rotation={spec.rotation} scale={spec.scale}>
+    // islands are modelled with local +Y up; this world's up is +Z
+    <group
+      position={spec.position}
+      rotation={[Math.PI / 2 + spec.rotation[0], spec.rotation[1], spec.rotation[2]]}
+      scale={spec.scale}
+    >
       <mesh geometry={spec.geometry}>
         <crystalIslandMaterial ref={materialRef} uSeed={spec.seed} uVein={spec.hue} />
       </mesh>
@@ -156,7 +190,9 @@ function MirrorShard({ spec }: { spec: MirrorSpec }) {
       <meshBasicMaterial
         color={spec.tint}
         transparent
-        opacity={0.3}
+        // faint sheets catching light, not opaque coloured slabs — at any
+        // real opacity these read as cardboard hanging in the sky
+        opacity={0.07}
         side={THREE.DoubleSide}
         depthWrite={false}
         blending={THREE.AdditiveBlending}
@@ -208,6 +244,7 @@ export default function WorldScene({
   return (
     <group>
       <Nebula reveal={reveal} />
+      <Terrain reveal={reveal} />
 
       {/* The Infinite Core, far below everything */}
       <mesh position={[impact[0] * 0.3, impact[1] * 0.3, -150]}>
