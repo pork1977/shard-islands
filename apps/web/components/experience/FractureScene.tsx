@@ -91,7 +91,9 @@ export default function FractureScene({ normalMap }: { normalMap: THREE.Texture 
       state.camera.position.set(
         THREE.MathUtils.lerp(0, impact2D[0] * 0.85, eased),
         THREE.MathUtils.lerp(0, impact2D[1] * 0.85, eased),
-        THREE.MathUtils.lerp(5, -34, accel),
+        // stops short of the island field, so the fall ends looking out over
+        // the world rather than buried inside the nearest rock
+        THREE.MathUtils.lerp(5, -19, accel),
       );
     }
   });
