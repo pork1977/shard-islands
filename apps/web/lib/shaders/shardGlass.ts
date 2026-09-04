@@ -30,6 +30,7 @@ export const ShardGlassMaterial = shaderMaterial(
     attribute vec3 aCentroid;
     attribute vec3 aRandom;
     attribute float aEdge;
+    attribute float aEdgeWidth;
     attribute float aDist;
 
     uniform float uProgress;
@@ -40,6 +41,7 @@ export const ShardGlassMaterial = shaderMaterial(
     varying vec3 vNormal;
     varying vec3 vRandom;
     varying float vEdge;
+    varying float vEdgeWidth;
     varying float vDist;
     varying float vCracked;
     varying float vFlash;
@@ -74,6 +76,7 @@ export const ShardGlassMaterial = shaderMaterial(
       vNormal = normal;
       vRandom = aRandom;
       vEdge = aEdge;
+      vEdgeWidth = aEdgeWidth;
       vDist = aDist;
 
       vec2 fromImpact = aCentroid.xy - uImpact;
@@ -99,6 +102,7 @@ export const ShardGlassMaterial = shaderMaterial(
     varying vec3 vNormal;
     varying vec3 vRandom;
     varying float vEdge;
+    varying float vEdgeWidth;
     varying float vDist;
     varying float vCracked;
     varying float vFlash;
@@ -129,25 +133,38 @@ export const ShardGlassMaterial = shaderMaterial(
       vec3 col = glassSurface(vCentroidUv + rel + shardShift);
       col *= mix(1.0, 0.86 + vRandom.z * 0.28, vCracked);
 
-      // aEdge runs 1 at the shard centre to 0 along its outline. fwidth gives a
-      // constant pixel-width hairline regardless of shard size; thresholding
-      // aEdge directly made crack width proportional to shard size.
-      float w = fwidth(vEdge);
-      float crack = (1.0 - smoothstep(0.0, w * 1.4, vEdge)) * vCracked;
-      float bruise = (1.0 - smoothstep(0.0, w * 7.0, vEdge)) * vCracked;
+      // aEdge runs 1 at the shard centre to 0 along its outline. fwidth turns
+      // it into a distance in PIXELS, so crack width stays constant regardless
+      // of shard size (thresholding aEdge directly gave big shards big gashes).
+      float px = vEdge / max(fwidth(vEdge), 1e-6);
 
-      // glass either side of the split darkens, and the broken lip catches light.
-      // Brightness varies per shard and falls off from the strike — cracks lit
-      // uniformly across the whole pane read as decorative neon, not damage.
-      col = mix(col, col * 0.45, bruise * 0.5);
-      col += uLightColor * crack * (0.08 + 0.3 * exp(-vDist * 2.0)) * (0.6 + vRandom.x * 0.8);
+      // Width hierarchy: a few thick splits, most of them faint hairlines,
+      // everything fatter near the strike. Uniform-weight lines everywhere are
+      // what made this read as a road map rather than broken glass.
+      float halfWidth = vEdgeWidth * (0.5 + 0.75 * exp(-vDist * 1.6));
 
-      // light from the world beneath leaking up through the cracks
-      float leak = crack * exp(-vDist * 3.0);
-      col += uGlowColor * leak * 1.1;
+      // A crack is a volume, not a stroke: a dark void down the middle with
+      // bright lips either side where the fracture faces catch the light.
+      // The lip band is kept tight — a wide one turns thick cracks into
+      // puffy silver veins that read as molten metal rather than glass.
+      float core = (1.0 - smoothstep(halfWidth * 0.35, halfWidth, px)) * vCracked;
+      float lip = exp(-pow((px - halfWidth * 1.1) / max(halfWidth * 0.5, 0.4), 2.0)) * vCracked;
+      float bruise = (1.0 - smoothstep(0.0, halfWidth * 5.0 + 2.0, px)) * vCracked;
+
+      col = mix(col, col * 0.5, bruise * 0.4);
+      col = mix(col, col * 0.15, core * 0.8);
+
+      // silver-white, per-crack varied. Near-white rather than cyan: the tint
+      // was what gave the whole pane a neon, decorative cast.
+      vec3 silver = vec3(0.86, 0.93, 1.0);
+      col += silver * lip * (0.22 + vRandom.x * 0.3) * (0.4 + 0.7 * exp(-vDist * 1.4));
+
+      // colour only survives right at the strike, where the world beneath
+      // starts showing through
+      col += uGlowColor * (lip + core * 0.5) * exp(-vDist * 5.5) * 0.9;
 
       // the white-hot instant of this piece letting go
-      col += vec3(0.92, 0.98, 1.0) * crack * vFlash * 1.5;
+      col += silver * (lip + core) * vFlash * 1.4;
 
       // pulverised core at the strike, where glass is crushed not cleanly split
       col += uGlowColor * exp(-vDist * 26.0) * 0.9 * vCracked;

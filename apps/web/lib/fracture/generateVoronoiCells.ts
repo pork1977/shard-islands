@@ -3,6 +3,13 @@ import { Delaunay } from "d3-delaunay";
 export interface FracturePattern {
   /** Convex polygons in pane-local space, wound CCW, first point not repeated. */
   cells: number[][][];
+  /**
+   * Per cell, a width multiplier for the crack running from vertex i to i+1.
+   * Cracks need a strong hierarchy — a few thick splits, many faint hairlines.
+   * Uniform-weight lines everywhere are what make a fracture read as a road
+   * map rather than broken glass.
+   */
+  cellEdgeWidths: number[][];
   /** Impact point in pane-local space. */
   impact: [number, number];
   width: number;
@@ -133,20 +140,21 @@ export function generateVoronoiCells({
   const voronoi = delaunay.voronoi([-halfW, -halfH, halfW, halfH]);
 
   const cells: number[][][] = [];
+  const cellEdgeWidths: number[][] = [];
   for (let i = 0; i < points.length; i++) {
     const polygon = voronoi.cellPolygon(i);
     if (!polygon || polygon.length < 4) continue;
     // d3 repeats the first point to close the ring; drop it
-    cells.push(
-      jagged(
-        polygon.slice(0, -1).map((p) => [p[0], p[1]] as [number, number]),
-        halfW,
-        halfH,
-      ),
+    const { points: jaggedPoints, widths } = jagged(
+      polygon.slice(0, -1).map((p) => [p[0], p[1]] as [number, number]),
+      halfW,
+      halfH,
     );
+    cells.push(jaggedPoints);
+    cellEdgeWidths.push(widths);
   }
 
-  return { cells, impact, width, height };
+  return { cells, cellEdgeWidths, impact, width, height };
 }
 
 /**
@@ -159,10 +167,15 @@ export function generateVoronoiCells({
  * gaps and overlaps along every crack. Hashing a canonical (order-independent)
  * key for the endpoint pair guarantees both cells produce identical points.
  */
-function jagged(poly: [number, number][], halfW: number, halfH: number): number[][] {
+function jagged(
+  poly: [number, number][],
+  halfW: number,
+  halfH: number,
+): { points: number[][]; widths: number[] } {
   const SUBDIVISIONS = 3;
   const EPS = 1e-6;
   const out: number[][] = [];
+  const widths: number[] = [];
 
   // An edge lying along the pane's own border isn't a crack — jittering it
   // pulls the outermost shards off the edge of the screen and lets the
@@ -179,8 +192,13 @@ function jagged(poly: [number, number][], halfW: number, halfH: number): number[
     const dx = b[0] - a[0];
     const dy = b[1] - a[1];
     const len = Math.hypot(dx, dy);
-    if (len < EPS) continue;
-    if (onBorder(a) && onBorder(b)) continue;
+
+    // The pane's own border is not a crack, so it gets zero width and draws
+    // no line at all — otherwise a bright rectangle frames the screen.
+    if (len < EPS || (onBorder(a) && onBorder(b))) {
+      widths.push(0);
+      continue;
+    }
 
     // canonical direction, so both adjacent cells walk the edge the same way
     const forward = a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
@@ -190,6 +208,11 @@ function jagged(poly: [number, number][], halfW: number, halfH: number): number[
 
     const nx = -(to[1] - from[1]) / len;
     const ny = (to[0] - from[0]) / len;
+
+    // Heavily skewed so most cracks are faint hairlines and a handful are
+    // thick, chunky splits. Hashed from the shared edge key so the two cells
+    // either side of a crack always agree on how wide it is.
+    const widthFactor = 0.3 + Math.pow(hash(key + ":w"), 3.0) * 2.4;
 
     const interior: number[][] = [];
     for (let s = 1; s < SUBDIVISIONS; s++) {
@@ -205,9 +228,12 @@ function jagged(poly: [number, number][], halfW: number, halfH: number): number[
 
     if (!forward) interior.reverse();
     out.push(...interior);
+    // one width per emitted sub-segment, so a crack keeps a consistent
+    // thickness along its whole length
+    for (let s = 0; s < SUBDIVISIONS; s++) widths.push(widthFactor);
   }
 
-  return out;
+  return { points: out, widths };
 }
 
 function edgeKey(a: [number, number], b: [number, number]): string {

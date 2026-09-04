@@ -24,7 +24,7 @@ export function buildFractureGeometry(
   pattern: FracturePattern,
   depth = 0.05,
 ): THREE.BufferGeometry {
-  const { cells, impact, width, height } = pattern;
+  const { cells, cellEdgeWidths, impact, width, height } = pattern;
 
   const positions: number[] = [];
   const normals: number[] = [];
@@ -33,6 +33,7 @@ export function buildFractureGeometry(
   const centroids: number[] = [];
   const randoms: number[] = [];
   const edges: number[] = [];
+  const edgeWidths: number[] = [];
   const dists: number[] = [];
 
   const halfDepth = depth / 2;
@@ -47,7 +48,8 @@ export function buildFractureGeometry(
     y / height + 0.5,
   ];
 
-  for (const cell of cells) {
+  for (let ci = 0; ci < cells.length; ci++) {
+    const cell = cells[ci];
     if (cell.length < 3) continue;
 
     // guarantee CCW winding so side-face normals point outward
@@ -57,7 +59,22 @@ export function buildFractureGeometry(
       const [x2, y2] = cell[(i + 1) % cell.length];
       area += x1 * y2 - x2 * y1;
     }
-    const poly = area < 0 ? [...cell].reverse() : cell;
+
+    let poly = cell;
+    let widths = cellEdgeWidths[ci];
+    if (area < 0) {
+      // reversing the ring also remaps which edge each width belongs to:
+      // segment j of the reversed ring is the reverse of segment n-2-j
+      const n = cell.length;
+      const rp: number[][] = [];
+      const rw: number[] = [];
+      for (let j = 0; j < n; j++) {
+        rp.push(cell[n - 1 - j]);
+        rw.push(widths[(((n - 2 - j) % n) + n) % n]);
+      }
+      poly = rp;
+      widths = rw;
+    }
 
     let cx = 0;
     let cy = 0;
@@ -86,6 +103,7 @@ export function buildFractureGeometry(
       ny: number,
       nz: number,
       edge: number,
+      edgeWidth: number,
       uv?: [number, number],
     ) => {
       positions.push(x, y, z);
@@ -98,6 +116,7 @@ export function buildFractureGeometry(
       centroids.push(cx, cy, 0);
       randoms.push(rand[0], rand[1], rand[2]);
       edges.push(edge);
+      edgeWidths.push(edgeWidth);
       dists.push(dist);
     };
 
@@ -105,15 +124,19 @@ export function buildFractureGeometry(
       const a = inset[i];
       const b = inset[(i + 1) % inset.length];
 
+      // Because the geometry is non-indexed, each triangle owns its own copies
+      // of a and b — which is what lets every edge carry its own crack width.
+      const ew = widths[i] ?? 1;
+
       // front face — fan from the centroid, aEdge 1 at centre / 0 at outline
-      push(cx, cy, halfDepth, 0, 0, 1, 1, [ccu, ccv]);
-      push(a[0], a[1], halfDepth, 0, 0, 1, 0);
-      push(b[0], b[1], halfDepth, 0, 0, 1, 0);
+      push(cx, cy, halfDepth, 0, 0, 1, 1, ew, [ccu, ccv]);
+      push(a[0], a[1], halfDepth, 0, 0, 1, 0, ew);
+      push(b[0], b[1], halfDepth, 0, 0, 1, 0, ew);
 
       // back face, reversed winding
-      push(cx, cy, -halfDepth, 0, 0, -1, 1, [ccu, ccv]);
-      push(b[0], b[1], -halfDepth, 0, 0, -1, 0);
-      push(a[0], a[1], -halfDepth, 0, 0, -1, 0);
+      push(cx, cy, -halfDepth, 0, 0, -1, 1, ew, [ccu, ccv]);
+      push(b[0], b[1], -halfDepth, 0, 0, -1, 0, ew);
+      push(a[0], a[1], -halfDepth, 0, 0, -1, 0, ew);
 
       // side wall — the cut edge of the glass
       const dx = b[0] - a[0];
@@ -122,13 +145,13 @@ export function buildFractureGeometry(
       const nx = dy / len;
       const ny = -dx / len;
 
-      push(a[0], a[1], halfDepth, nx, ny, 0, 0);
-      push(a[0], a[1], -halfDepth, nx, ny, 0, 0);
-      push(b[0], b[1], -halfDepth, nx, ny, 0, 0);
+      push(a[0], a[1], halfDepth, nx, ny, 0, 0, ew);
+      push(a[0], a[1], -halfDepth, nx, ny, 0, 0, ew);
+      push(b[0], b[1], -halfDepth, nx, ny, 0, 0, ew);
 
-      push(a[0], a[1], halfDepth, nx, ny, 0, 0);
-      push(b[0], b[1], -halfDepth, nx, ny, 0, 0);
-      push(b[0], b[1], halfDepth, nx, ny, 0, 0);
+      push(a[0], a[1], halfDepth, nx, ny, 0, 0, ew);
+      push(b[0], b[1], -halfDepth, nx, ny, 0, 0, ew);
+      push(b[0], b[1], halfDepth, nx, ny, 0, 0, ew);
     }
   }
 
@@ -143,6 +166,7 @@ export function buildFractureGeometry(
   geometry.setAttribute("aCentroid", attr(centroids, 3));
   geometry.setAttribute("aRandom", attr(randoms, 3));
   geometry.setAttribute("aEdge", attr(edges, 1));
+  geometry.setAttribute("aEdgeWidth", attr(edgeWidths, 1));
   geometry.setAttribute("aDist", attr(dists, 1));
 
   return geometry;
