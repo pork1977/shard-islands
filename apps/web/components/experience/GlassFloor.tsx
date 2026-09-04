@@ -70,23 +70,24 @@ function HandprintHotspot() {
         <meshBasicMaterial
           map={glowTexture}
           transparent
-          color="#dff4ff"
-          opacity={0.3}
+          color="#4fd8ff"
+          opacity={0.35}
           depthWrite={false}
           blending={THREE.AdditiveBlending}
           toneMapped={false}
         />
       </mesh>
-      {/* the print itself is an etched decal, NOT additive — additive on a
-          bright pane clips to white and the fingers merge into one blob */}
+      {/* Etched area lit from beneath. Additive is safe now the pane is dark —
+          it only clipped the fingers into a blob back when the glass was pale. */}
       <mesh>
         <planeGeometry args={[1.1, 1.1]} />
         <meshBasicMaterial
           map={handTexture}
           transparent
-          color="#f2fdff"
+          color="#9fe9ff"
           opacity={0.85}
           depthWrite={false}
+          blending={THREE.AdditiveBlending}
           toneMapped={false}
         />
       </mesh>

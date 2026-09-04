@@ -15,10 +15,10 @@ export const GlassFloorMaterial = shaderMaterial(
     uTime: 0,
     uAspect: 1.777,
     uNormalMap: null as THREE.Texture | null,
-    uGlassColor: new THREE.Color("#798d97"),
-    uLightColor: new THREE.Color("#ffd9a0"),
-    uCoolColor: new THREE.Color("#5f8b96"),
-    uLightPos: new THREE.Vector2(0.16, 0.86),
+    uGlassColor: new THREE.Color("#0c161e"),
+    uLightColor: new THREE.Color("#9dc6e8"),
+    uCoolColor: new THREE.Color("#14323f"),
+    uLightPos: new THREE.Vector2(0.18, 0.88),
   },
   /* glsl */ `
     varying vec2 vUv;
@@ -41,20 +41,20 @@ export const GlassFloorMaterial = shaderMaterial(
       return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
     }
 
-    // The light behind the pane, before it gets refracted. A warm lamp bleed
-    // falling off across the surface plus a weak cool counter-light, which is
-    // what stops a flat pane from looking evenly lit and dead.
+    // The light behind the pane, before it gets refracted. A single hard, cold
+    // source raking across dark architectural glass — most of the pane sits in
+    // shadow so the handprint is the only inviting thing on screen.
     vec3 behindGlass(vec2 p, vec2 lightPos) {
       vec2 q = (p - lightPos) * vec2(uAspect, 1.0);
-      float lamp = exp(-dot(q, q) * 4.0);
-      float wide = exp(-dot(q, q) * 0.42);
+      float hard = exp(-dot(q, q) * 9.0);
+      float spill = exp(-dot(q, q) * 1.6);
 
-      vec2 q2 = (p - vec2(0.92, 0.12)) * vec2(uAspect, 1.0);
-      float cool = exp(-dot(q2, q2) * 1.1);
+      vec2 q2 = (p - vec2(0.94, 0.08)) * vec2(uAspect, 1.0);
+      float counter = exp(-dot(q2, q2) * 2.2);
 
       vec3 col = uGlassColor;
-      col += uLightColor * (lamp * 0.45 + wide * 0.22);
-      col += uCoolColor * cool * 0.26;
+      col += uLightColor * (hard * 0.8 + spill * 0.14);
+      col += uCoolColor * counter * 0.5;
       return col;
     }
 
@@ -112,20 +112,24 @@ export const GlassFloorMaterial = shaderMaterial(
       // iron-green cast that real glass carries
       col *= vec3(0.95, 1.0, 0.975);
 
-      vec3 L = normalize(vec3((lightPos - vUv) * vec2(uAspect, 1.0), 0.5));
+      // Grazing light picks out individual pebbles as hard sparkles — this is
+      // what keeps the dark half reading as textured GLASS rather than a void,
+      // which is the trap the earlier dark-vignette version fell into.
+      vec3 L = normalize(vec3((lightPos - vUv) * vec2(uAspect, 1.0), 0.35));
       vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
-      float spec = pow(max(dot(N, H), 0.0), 42.0);
-      col += uLightColor * spec * 0.38;
+      float spec = pow(max(dot(N, H), 0.0), 90.0);
+      float sparkle = pow(max(dot(N, H), 0.0), 300.0);
+      col += uLightColor * (spec * 0.5 + sparkle * 0.9);
 
-      // the joint channel itself: darker, desaturated, lit by the same lamp
-      float lampAtJoint = exp(-dot((vUv - lightPos) * vec2(uAspect, 1.0), (vUv - lightPos) * vec2(uAspect, 1.0)) * 0.9);
-      vec3 jointCol = vec3(0.34, 0.38, 0.4) * (0.75 + lampAtJoint * 0.9);
-      col = mix(col, jointCol, jointMask * 0.85);
+      // structural joint: near-black metal channel with a cold edge catch
+      float lampAtJoint = exp(-dot((vUv - lightPos) * vec2(uAspect, 1.0), (vUv - lightPos) * vec2(uAspect, 1.0)) * 1.6);
+      vec3 jointCol = vec3(0.03, 0.05, 0.07) + uLightColor * lampAtJoint * 0.28;
+      col = mix(col, jointCol, jointMask * 0.92);
 
-      // bright edge along the bevel facing the light, shadow on the far side
+      // hard specular edge along the bevel facing the light, deep shadow opposite
       float bevelFacing = dot(normalize(bevelDir + vec2(0.0001)), normalize((lightPos - vUv) * vec2(uAspect, 1.0)));
-      col += uLightColor * bevelMask * max(bevelFacing, 0.0) * 0.42;
-      col *= 1.0 - bevelMask * max(-bevelFacing, 0.0) * 0.3;
+      col += uLightColor * bevelMask * pow(max(bevelFacing, 0.0), 1.5) * 0.5;
+      col *= 1.0 - bevelMask * max(-bevelFacing, 0.0) * 0.55;
 
       // fine sandblast micro-grain
       col *= 0.985 + hash1(floor(vUv * vec2(1600.0 * uAspect, 1600.0))) * 0.03;
