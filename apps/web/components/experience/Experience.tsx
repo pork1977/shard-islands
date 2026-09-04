@@ -8,6 +8,7 @@ import FractureScene from "./FractureScene";
 import WorldScene from "./WorldScene";
 import PlayerGlider from "@/components/world/PlayerGlider";
 import ControlsHint from "./ControlsHint";
+import SpeedLines from "./SpeedLines";
 import { generateFrostedGlassNormalTexture } from "@/lib/textures/frostedGlassNormal";
 import { useGameStore } from "@/lib/store/useGameStore";
 
@@ -26,6 +27,7 @@ function Stage() {
       {/* the broken pane stays mounted while it is still falling away */}
       {phase === "fracturing" && <FractureScene normalMap={normalMap} />}
       {phase === "flying" && <PlayerGlider />}
+      <SpeedLines />
     </>
   );
 }

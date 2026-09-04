@@ -38,6 +38,8 @@ declare module "@react-three/fiber" {
       uFogColor?: THREE.ColorRepresentation;
       uRoads?: THREE.Vector4[];
       uRoadCount?: number;
+      uCity?: THREE.Vector4;
+      uUrban?: THREE.ColorRepresentation;
     };
   }
 }
@@ -77,12 +79,17 @@ function Land({ reveal }: { reveal: React.RefObject<number> }) {
   const materialRef = useRef<InstanceType<typeof TerrainMaterial>>(null);
   const terrain = useMemo(() => generateTerrain(), []);
 
-  // same generator the buildings use, so the roads actually join the towns
-  const roads = useMemo(() => {
-    const { roads: segs } = generateProps();
+  // same generator the buildings use, so roads join the towns and the paved
+  // ground lands under the city rather than beside it
+  const layout = useMemo(() => {
+    const { roads: segs, city } = generateProps();
     const packed = Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0));
     segs.slice(0, 8).forEach((s, i) => packed[i].set(s[0], s[1], s[2], s[3]));
-    return { packed, count: Math.min(segs.length, 8) };
+    return {
+      packed,
+      count: Math.min(segs.length, 8),
+      city: new THREE.Vector4(city.cx, city.cy, city.radius, city.block),
+    };
   }, []);
 
   useFrame((state) => {
@@ -98,8 +105,9 @@ function Land({ reveal }: { reveal: React.RefObject<number> }) {
           ref={materialRef}
           uMaxHeight={TERRAIN_MAX_HEIGHT}
           uWaterHeight={WATER_HEIGHT}
-          uRoads={roads.packed}
-          uRoadCount={roads.count}
+          uRoads={layout.packed}
+          uRoadCount={layout.count}
+          uCity={layout.city}
         />
       </mesh>
 
@@ -187,7 +195,9 @@ function Clouds({ texture }: { texture: THREE.Texture }) {
         position: [
           Math.cos(angle) * radius,
           Math.sin(angle) * radius,
-          -25 - t * 420,
+          // stops well above the highest ground — decks that reach the
+          // terrain smear white fog across the hills
+          -25 - t * 300,
         ],
         scale: 90 + Math.random() * 230,
         opacity: 0.2 + Math.random() * 0.45,

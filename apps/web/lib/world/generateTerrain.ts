@@ -56,11 +56,14 @@ export function terrainHeightAt(x: number, y: number): number {
   // ridges only above a threshold, so lowlands stay open and flyable
   const ridge = Math.pow(Math.max(0, continental - 0.42) * 2.4, 1.6);
 
-  // relief pushed hard: seen from flying altitude, gentle undulation reads as
-  // a flat plain, and the map needs recognisable hills and valleys
-  let h = (continental * 0.5 + detail * 0.45) * TERRAIN_MAX_HEIGHT * 0.8;
-  h += ridge * TERRAIN_MAX_HEIGHT * 1.5;
-  return h;
+  // Normalised to 0..1 BEFORE scaling, so TERRAIN_MAX_HEIGHT is actually the
+  // ceiling. Summing unbounded terms overshot it by more than threefold,
+  // which put peaks above the altitude flight happens at and left the player
+  // scraping through mountains that should have been well below them.
+  const ridgeN = Math.min(1, ridge / 1.7);
+  const rolling = continental * 0.6 + detail * 0.4;
+  const t = Math.max(0, Math.min(1, rolling * 0.45 + ridgeN * 0.55));
+  return t * TERRAIN_MAX_HEIGHT;
 }
 
 export interface TerrainData {

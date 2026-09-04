@@ -23,6 +23,9 @@ export const TerrainMaterial = shaderMaterial(
     // and better-fitting than laying ribbon geometry over uneven ground
     uRoads: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0)),
     uRoadCount: 0,
+    /** xy = city centre, z = radius, w = block size. */
+    uCity: new THREE.Vector4(0, 0, 0, 34),
+    uUrban: new THREE.Color("#8a8f96"),
   },
   /* glsl */ `
     varying vec3 vNormalW;
@@ -53,6 +56,8 @@ export const TerrainMaterial = shaderMaterial(
     uniform vec3 uRoadColor;
     uniform vec4 uRoads[8];
     uniform int uRoadCount;
+    uniform vec4 uCity;
+    uniform vec3 uUrban;
 
     varying vec3 vNormalW;
     varying vec3 vPos;
@@ -126,6 +131,18 @@ export const TerrainMaterial = shaderMaterial(
         float d = length(vPos.xy - (a + ab * t));
         road = max(road, 1.0 - smoothstep(3.0, 7.0, d));
       }
+      // The city floor: paved ground with a street grid running through it,
+      // which is what turns a cluster of buildings into somewhere that looks
+      // built rather than dropped on a field.
+      float cityDist = length(vPos.xy - uCity.xy);
+      float inCity = 1.0 - smoothstep(uCity.z * 0.75, uCity.z * 1.12, cityDist);
+      inCity *= 1.0 - smoothstep(0.18, 0.4, steep);
+      col = mix(col, uUrban, inCity * 0.8);
+
+      vec2 g = abs(fract((vPos.xy - uCity.xy) / uCity.w) - 0.5) * uCity.w;
+      float streets = 1.0 - smoothstep(2.0, 4.2, min(g.x, g.y));
+      col = mix(col, uRoadColor * 0.82, streets * inCity * 0.9);
+
       // roads do not climb cliffs
       road *= 1.0 - smoothstep(0.25, 0.5, steep);
       col = mix(col, uRoadColor, road * 0.85);

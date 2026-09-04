@@ -7,10 +7,14 @@ export const SERVER_TICK_RATE_HZ = 20;
 export const SERVER_TICK_MS = 1000 / SERVER_TICK_RATE_HZ;
 
 export const FLIGHT = {
-  baseForwardSpeed: 14, // m/s
-  diveSpeedMultiplier: 1.8,
+  // Raised across the board: the map is 1400 units across, and at the old
+  // cruise it took over a minute and a half to cross, which is what made
+  // the ground look like it was barely moving.
+  baseForwardSpeed: 26,
+  diveSpeedMultiplier: 1.9,
   turnDamping: 6, // higher = snappier steering response
-  boostSpeedMultiplier: 3, // jetstream draft boost
+  /** Boost has to be unmistakable — 1.5x was not felt at all. */
+  boostSpeedMultiplier: 2.7,
 } as const;
 
 export const TRAIL = {

@@ -65,7 +65,8 @@ export default function PlayerGlider() {
     // into the heading makes the craft feel twitchy and toy-like, and the
     // damping is what gives it the weight of a glider.
     const turnTarget = -inp.turn * 1.6;
-    const pitchTarget = -inp.pitch * 1.0;
+    // inverted: drag down / press S to pull the nose UP, like a flight stick
+    const pitchTarget = inp.pitch * 1.0;
 
     p.yaw += (turnTarget - 0) * dt * FLIGHT.turnDamping * 0.35;
     p.pitch += (pitchTarget - p.pitch) * dt * FLIGHT.turnDamping;
@@ -81,8 +82,12 @@ export default function PlayerGlider() {
     const target =
       FLIGHT.baseForwardSpeed *
       (1 + dive * (FLIGHT.diveSpeedMultiplier - 1) - climb * 0.35) *
-      (inp.boosting ? FLIGHT.boostSpeedMultiplier * 0.5 : 1);
-    p.speed += (target - p.speed) * dt * 2.2;
+      (inp.boosting ? FLIGHT.boostSpeedMultiplier : 1);
+    // Boost engages hard and bleeds off gently. Ramping in at the same slow
+    // rate it decays at is what made shift feel like nothing was happening.
+    const responsiveness = target > p.speed ? 5.5 : 1.6;
+    p.speed += (target - p.speed) * Math.min(1, dt * responsiveness);
+    p.boosting = inp.boosting;
 
     const cp = Math.cos(p.pitch);
     forward.set(cp * Math.cos(p.yaw), cp * Math.sin(p.yaw), Math.sin(p.pitch));
