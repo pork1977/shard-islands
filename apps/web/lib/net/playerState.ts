@@ -32,6 +32,20 @@ export interface LivePlayerState {
   trailLength: number;
 }
 
+/** Trail every player starts with, before anything earned on the way down. */
+export const STARTING_TRAIL_LENGTH = 26;
+
+/**
+ * How the player arrives. The fall hands over a heading, some of its own
+ * speed and whatever trail was earned on the way down, so flight begins as a
+ * continuation of the descent rather than from a standing start.
+ */
+export interface PlayerSpawn {
+  pitch?: number;
+  speed?: number;
+  trailLength?: number;
+}
+
 export const playerState: LivePlayerState = {
   position: [0, 0, 0],
   quaternion: [0, 0, 0, 1],
@@ -42,20 +56,24 @@ export const playerState: LivePlayerState = {
   speed: 0,
   boosting: false,
   trail: [],
-  trailLength: 26,
+  trailLength: STARTING_TRAIL_LENGTH,
 };
 
-export function resetPlayerState(position: Vec3Tuple, yaw: number) {
+export function resetPlayerState(
+  position: Vec3Tuple,
+  yaw: number,
+  spawn: PlayerSpawn = {},
+) {
   playerState.position = position;
   playerState.quaternion = [0, 0, 0, 1];
   playerState.velocity = [0, 0, 0];
   playerState.yaw = yaw;
-  playerState.pitch = 0;
+  playerState.pitch = spawn.pitch ?? 0;
   playerState.roll = 0;
-  playerState.speed = 0;
+  playerState.speed = spawn.speed ?? 0;
   playerState.boosting = false;
   playerState.trail = [];
-  playerState.trailLength = 26;
+  playerState.trailLength = spawn.trailLength ?? STARTING_TRAIL_LENGTH;
 }
 
 /**

@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { generateGlider } from "@/lib/world/generateGlider";
 import { GliderCraftMaterial } from "@/lib/shaders/gliderCraft";
 import { useFlightControls } from "@/components/controllers/useFlightControls";
+import { reportLocalPlayer } from "@/lib/net/connection";
 import { playerState, pushTrailPoint } from "@/lib/net/playerState";
 import TrailRibbon from "./TrailRibbon";
 import {
@@ -54,6 +55,9 @@ export default function PlayerGlider() {
   const boom = useMemo(() => new THREE.Vector3(), []);
   const smoothed = useRef({ turn: 0, pitch: 0 });
   const zoomShown = useRef(1);
+  /** 0 the instant flight begins, 1 once the chase camera has taken over. */
+  const handover = useRef(0);
+  const seeded = useRef(false);
   const basis = useMemo(() => new THREE.Matrix4(), []);
 
   useFrame((state, rawDelta) => {
@@ -77,7 +81,7 @@ export default function PlayerGlider() {
       (inp.pitch - smoothed.current.pitch) * Math.min(1, dt * 3.0);
 
     const turnTarget = -smoothed.current.turn * 1.0;
-    // back to the original sense: press W / drag up to point the nose up
+    // positive input points the nose DOWN: drag down, or press W
     const pitchTarget = -smoothed.current.pitch * 0.62;
 
     p.yaw += turnTarget * dt * 1.35;
@@ -85,7 +89,9 @@ export default function PlayerGlider() {
     p.pitch = THREE.MathUtils.clamp(p.pitch, -0.9, 0.9);
 
     // bank into the turn — reads as aerodynamic rather than sliding sideways
-    const rollTarget = -smoothed.current.turn * 0.85;
+    // bank INTO the turn — the sign was inverted, so it leant outward like a
+    // car body-rolling rather than an aircraft
+    const rollTarget = smoothed.current.turn * 0.85;
     p.roll += (rollTarget - p.roll) * dt * 4.0;
 
     // diving gains speed, climbing bleeds it
@@ -148,6 +154,9 @@ export default function PlayerGlider() {
     // arc-length sampled, so trail resolution does not depend on frame rate
     pushTrailPoint(p, TRAIL.pointSpacingMeters * 2.2, Math.round(p.trailLength));
 
+    // Rate-limited inside, to the server's own tick. A no-op while offline.
+    reportLocalPlayer(performance.now());
+
     const group = groupRef.current;
     if (!group) return;
 
@@ -196,7 +205,20 @@ export default function PlayerGlider() {
       .set(p.position[0], p.position[1], p.position[2])
       .addScaledVector(forward, 9 * Math.max(0.15, Math.cos(ly)));
 
-    const follow = 1 - Math.pow(0.0016, dt);
+    // The camera is inherited from the fall, pointed straight down at the
+    // ground, and the chase framing is nearly horizontal. Cutting between
+    // the two is the jolt that made arrival read as a scene change rather
+    // than as the end of a dive, so the follow is slack for the first
+    // second and tightens to its normal rate as the craft levels out.
+    if (!seeded.current) {
+      seeded.current = true;
+      state.camera.getWorldDirection(lookAt);
+      lookAt.multiplyScalar(9).add(state.camera.position);
+    }
+    handover.current = Math.min(1, handover.current + dt / 1.1);
+    const settle = handover.current * handover.current * (3 - 2 * handover.current);
+
+    const follow = 1 - Math.pow(THREE.MathUtils.lerp(0.6, 0.0016, settle), dt);
     state.camera.position.lerp(camTarget, follow);
     lookAt.lerp(lookTarget, follow);
     state.camera.up.copy(UP);

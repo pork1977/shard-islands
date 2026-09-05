@@ -6,16 +6,32 @@ import * as THREE from "three";
 import { ShardGlassMaterial } from "@/lib/shaders/shardGlass";
 import { generateVoronoiCells } from "@/lib/fracture/generateVoronoiCells";
 import { buildFractureGeometry } from "@/lib/fracture/fractureGeometry";
+import { FLIGHT } from "@shard-islands/shared";
 import { useGameStore } from "@/lib/store/useGameStore";
-import { resetPlayerState } from "@/lib/net/playerState";
-import { FLIGHT_ALTITUDE } from "@/lib/world/generateTerrain";
+import { resetPlayerState, STARTING_TRAIL_LENGTH } from "@/lib/net/playerState";
+import { FLIGHT_ALTITUDE, TERRAIN_SIZE } from "@/lib/world/generateTerrain";
+import {
+  DESCENT_ACCEL,
+  DESCENT_DRAG_PER_SECOND,
+  collectMotes,
+  descentAuthority,
+  fallRun,
+} from "@/lib/world/fallMotes";
 import { useFlightControls } from "@/components/controllers/useFlightControls";
+import { reportDescent } from "@/lib/net/connection";
 import {
   CRACK_DURATION,
   COLLAPSE_AT,
   PLUNGE_AT,
   PLUNGE_DURATION,
 } from "@/lib/timeline";
+
+/**
+ * How far out the fall is allowed to carry the player. Inside the flight
+ * boundary (0.44 of the map), so nobody lands somewhere the game will
+ * immediately start steering them out of.
+ */
+const DESCENT_LIMIT = TERRAIN_SIZE * 0.4;
 
 extend({ ShardGlassMaterial });
 
@@ -46,6 +62,10 @@ export default function FractureScene({ normalMap }: { normalMap: THREE.Texture 
 
   const input = useFlightControls();
   const driftRef = useRef({ x: 0, y: 0, vx: 0, vy: 0 });
+  /** Last frame's altitude, so mote pickups are a crossing test, not a guess. */
+  const lastZRef = useRef<number | null>(null);
+  /** Where the fall is pointed. Damped, so steering swings the view round. */
+  const bearingRef = useRef<number | null>(null);
 
   const impact2D = useMemo<[number, number]>(
     () => (impact ? [impact[0], impact[1]] : [0, 0]),
@@ -94,10 +114,31 @@ export default function FractureScene({ normalMap }: { normalMap: THREE.Texture 
     // The fall does not end in a stop — it hands straight over to the player,
     // seeded with the position and heading the plunge arrived at so control
     // begins exactly where the camera already is.
+    //
+    // It also hands over its MOTION. Arriving at zero speed on a level
+    // heading threw away everything the descent had built up and read as the
+    // sequence stopping and a game starting; carrying the fall's direction,
+    // some of its speed and a nose-down attitude means the first thing the
+    // player does is pull out of a dive they were already in.
     if (p >= 1) {
+      const drift = driftRef.current;
+      const lateral = Math.hypot(drift.vx, drift.vy);
+
       resetPlayerState(
         [state.camera.position.x, state.camera.position.y, state.camera.position.z],
-        0,
+        // below a drift this small there is no meaningful heading to keep,
+        // and picking one out of the noise spins the craft on arrival
+        lateral > 6 ? Math.atan2(drift.vy, drift.vx) : 0,
+        {
+          pitch: -0.62,
+          speed: THREE.MathUtils.clamp(
+            FLIGHT.baseForwardSpeed + lateral * 0.35,
+            FLIGHT.baseForwardSpeed,
+            FLIGHT.baseForwardSpeed * 2.3,
+          ),
+          // everything caught on the way down, as a head start on the trail
+          trailLength: STARTING_TRAIL_LENGTH + fallRun.bonus,
+        },
       );
       beginFlight();
       return;
@@ -112,27 +153,112 @@ export default function FractureScene({ normalMap }: { normalMap: THREE.Texture 
       // pick where they come down turns the same seconds into a skydive.
       // Authority builds in over the first moments so the break still reads
       // as something happening TO them before it becomes theirs.
-      const authority = THREE.MathUtils.clamp((p - 0.06) * 4, 0, 1);
+      // shared with the mote layout, which integrates exactly this curve
+      const authority = descentAuthority(p);
       const drift = driftRef.current;
-      drift.vx += -input.current.turn * authority * dt * 26;
-      drift.vy += -input.current.pitch * authority * dt * 26;
-      drift.vx *= Math.pow(0.12, dt); // air resistance, so it settles
-      drift.vy *= Math.pow(0.12, dt);
+
+      // Steering is relative to where the fall is POINTED, not to the world
+      // axes. The view swings round to follow the drift, so world-locked
+      // controls would mean the same key sent the player somewhere different
+      // depending on which way they happened to be facing. Forward is the
+      // bearing and left/right are across it: a plane's controls, in a dive.
+      if (bearingRef.current === null) {
+        bearingRef.current = fallRun.bearings[0] ?? 0;
+      }
+      const aimX = Math.cos(bearingRef.current);
+      const aimY = Math.sin(bearingRef.current);
+      const push = input.current.pitch;
+      const steer = input.current.turn;
+      const shove = authority * dt * DESCENT_ACCEL;
+
+      drift.vx += (aimX * push + aimY * steer) * shove;
+      drift.vy += (aimY * push - aimX * steer) * shove;
+      drift.vx *= Math.pow(DESCENT_DRAG_PER_SECOND, dt); // settles at terminal
+      drift.vy *= Math.pow(DESCENT_DRAG_PER_SECOND, dt);
       drift.x += drift.vx * dt;
       drift.y += drift.vy * dt;
 
-      state.camera.position.set(
+      const fallX = THREE.MathUtils.clamp(
         THREE.MathUtils.lerp(0, impact2D[0] * 0.85, eased) + drift.x,
+        -DESCENT_LIMIT,
+        DESCENT_LIMIT,
+      );
+      const fallY = THREE.MathUtils.clamp(
         THREE.MathUtils.lerp(0, impact2D[1] * 0.85, eased) + drift.y,
-        THREE.MathUtils.lerp(5, FLIGHT_ALTITUDE, accel),
+        -DESCENT_LIMIT,
+        DESCENT_LIMIT,
+      );
+      const fallZ = THREE.MathUtils.lerp(5, FLIGHT_ALTITUDE, accel);
+
+      state.camera.position.set(fallX, fallY, fallZ);
+
+      // Anything the fall passed THROUGH this frame counts, not just what it
+      // happens to be next to right now: the descent covers several metres a
+      // frame by the end, and a plain proximity test drops the player
+      // straight through a mote without registering it.
+      const lastZ = lastZRef.current;
+      if (lastZ !== null) collectMotes(lastZ, fallX, fallY, fallZ);
+      lastZRef.current = fallZ;
+
+      // Where this ends up if the player holds what they are doing. Drawn on
+      // the ground as a ring: with the view tilted forward, the spot below
+      // the camera is off the bottom of the frame, and a landing marker you
+      // cannot see is not a landing marker.
+      const remaining = (1 - p) * PLUNGE_DURATION;
+      fallRun.landing[0] = THREE.MathUtils.clamp(
+        fallX + drift.vx * remaining * 0.85,
+        -DESCENT_LIMIT,
+        DESCENT_LIMIT,
+      );
+      fallRun.landing[1] = THREE.MathUtils.clamp(
+        fallY + drift.vy * remaining * 0.85,
+        -DESCENT_LIMIT,
+        DESCENT_LIMIT,
       );
 
-      // lean into the direction of travel — without it, steering moves the
-      // world past you but the fall itself feels inert
-      state.camera.rotation.set(
-        THREE.MathUtils.clamp(drift.vy * 0.012, -0.35, 0.35),
-        THREE.MathUtils.clamp(-drift.vx * 0.012, -0.35, 0.35),
-        0,
+      // Aim the fall.
+      //
+      // A camera pointed straight down cannot see anything it is steering
+      // toward: a mote three hundred metres to the side sits ninety degrees
+      // off axis and is simply never in the frame. Tilting the view forward,
+      // toward wherever the player is actually drifting, is what makes the
+      // descent something you can aim — and it lands the camera most of the
+      // way round to the near-horizontal framing that flight uses, so the
+      // handover has far less ground to cover.
+      //
+      // The tilt waits until the pane is well broken up. Swinging the view
+      // while the shards are still filling the frame would throw the debris
+      // off the edge of the screen, which is the thing this sequence has
+      // spent a lot of effort not doing.
+      if (Math.hypot(drift.vx, drift.vy) > 8) {
+        const want = Math.atan2(drift.vy, drift.vx);
+        let delta = want - bearingRef.current;
+        while (delta > Math.PI) delta -= Math.PI * 2;
+        while (delta < -Math.PI) delta += Math.PI * 2;
+        bearingRef.current += delta * Math.min(1, dt * 2.2);
+      }
+
+      const tilt = THREE.MathUtils.lerp(
+        0.08,
+        1.15,
+        THREE.MathUtils.smoothstep(p, 0.18, 0.8),
+      );
+      const dirX = Math.cos(bearingRef.current);
+      const dirY = Math.sin(bearingRef.current);
+      const sinT = Math.sin(tilt);
+      const cosT = Math.cos(tilt);
+
+      // Up is derived rather than fixed: looking straight down, "up the
+      // screen" is the bearing itself; looking level, it is the world's own
+      // up. Anything constant gimbals somewhere between the two.
+      // other clients see the fall itself, not a glider parked at spawn
+      reportDescent(performance.now(), fallX, fallY, fallZ, bearingRef.current);
+
+      state.camera.up.set(dirX * cosT, dirY * cosT, sinT);
+      state.camera.lookAt(
+        fallX + dirX * sinT * 60,
+        fallY + dirY * sinT * 60,
+        fallZ - cosT * 60,
       );
 
       // Field of view widens as the fall accelerates. Falling through open

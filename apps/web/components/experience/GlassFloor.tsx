@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { extend, useFrame, useThree, type ThreeElements } from "@react-three/fiber";
 import * as THREE from "three";
 import { GlassFloorMaterial } from "@/lib/shaders/glassFloor";
 import { generateHandprintTexture } from "@/lib/textures/handprintTexture";
 import { generateRadialGlowTexture } from "@/lib/textures/radialGlowTexture";
 import { useGameStore } from "@/lib/store/useGameStore";
+import { prewarmWorld } from "@/lib/world/prewarm";
+import { beginJoin } from "@/lib/net/connection";
 
 extend({ GlassFloorMaterial });
 
@@ -50,6 +52,10 @@ export function GlassPane({
         interactive
           ? (e) => {
               e.stopPropagation();
+              // Both at once, and neither waits for the other. The join has
+              // the whole fracture and fall to complete in; if it does not,
+              // the player flies alone until it does.
+              beginJoin();
               strike([e.point.x, e.point.y, e.point.z]);
             }
           : undefined
@@ -114,6 +120,11 @@ function HandprintHotspot() {
 }
 
 export default function GlassFloor({ normalMap }: { normalMap: THREE.Texture }) {
+  // the world below is built during this screen, not during the break
+  useEffect(() => {
+    prewarmWorld();
+  }, []);
+
   return (
     <group>
       <GlassPane normalMap={normalMap} />

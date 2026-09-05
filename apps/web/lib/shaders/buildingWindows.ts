@@ -11,38 +11,59 @@ import * as THREE from "three";
  *
  * The instance's scale is recovered from its matrix so the pattern can be
  * laid out in METRES — that is what keeps every window the same real size
- * across buildings of wildly different dimensions.
+ * across buildings of wildly different dimensions. Its position is recovered
+ * too, as a per-building seed: without one, every building in the world lit
+ * exactly the same windows, because the pattern was keyed on coordinates
+ * local to each box.
+ *
+ * Returns a setter for the clock rather than the uniform itself. Some
+ * windows flicker — a television, a candle, someone crossing in front of a
+ * lamp — so a scene has to advance that clock every frame, and handing back
+ * a function keeps the caller from having to reach into and mutate a value
+ * it was given.
  */
-export function applyBuildingWindows(material: THREE.Material) {
+export function applyBuildingWindows(
+  material: THREE.Material,
+): (seconds: number) => void {
+  const uTime = { value: 0 };
+
   material.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = uTime;
+
     shader.vertexShader = shader.vertexShader
       .replace(
         "#include <common>",
         `#include <common>
          varying vec3 vBuildingPos;
-         varying vec3 vBuildingNormal;`,
+         varying vec3 vBuildingNormal;
+         varying float vBuildingSeed;`,
       )
       .replace(
         "#include <begin_vertex>",
         `#include <begin_vertex>
          vec3 instScale = vec3(1.0);
+         vec3 instPos = vec3(0.0);
          #ifdef USE_INSTANCING
            instScale = vec3(
              length(instanceMatrix[0].xyz),
              length(instanceMatrix[1].xyz),
              length(instanceMatrix[2].xyz)
            );
+           instPos = instanceMatrix[3].xyz;
          #endif
          vBuildingPos = position * instScale;
-         vBuildingNormal = normal;`,
+         vBuildingNormal = normal;
+         vBuildingSeed = fract(sin(dot(instPos.xy, vec2(12.9898, 78.233))) * 43758.5453);`,
       );
 
     shader.fragmentShader = shader.fragmentShader
       .replace(
         "#include <common>",
         `#include <common>
+         uniform float uTime;
          varying vec3 vBuildingPos;
          varying vec3 vBuildingNormal;
+         varying float vBuildingSeed;
 
          float winHash(vec2 p) {
            return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -73,22 +94,41 @@ export function applyBuildingWindows(material: THREE.Material) {
            float paneY = step(0.30, f.y) * step(f.y, 0.80);
            float pane = paneX * paneY * wall;
 
-           // ground floor becomes a doorway instead of a window
-           float groundFloor = 1.0 - step(-0.5 * vBuildingPos.z, 0.0);
-           float isGround = step(upPos, floorH * 0.75 - abs(vBuildingPos.z) * 0.0);
+           // every hash is offset by the building's own seed, so two houses
+           // side by side do not light the identical set of rooms
+           vec2 key = cell + vBuildingSeed * 37.0;
 
-           float lit = winHash(cell + 3.1);
+           float lit = winHash(key + 3.1);
+           float isLit = step(0.62, lit);
+
+           // A third of the occupied rooms have something moving in them.
+           // Two motions overlaid: a slow wobble for firelight or a screen,
+           // and hard dropouts for someone passing between lamp and glass.
+           float flickers = step(0.66, winHash(key + 5.5));
+           float phase = winHash(key + 17.7);
+           float t = uTime * (0.6 + phase * 1.7) + phase * 60.0;
+           float wobble = 0.66 + 0.34 * sin(t * 5.3) * sin(t * 2.1 + 1.3);
+           float step6 = floor(t * 2.6);
+           float dropout = step(0.12, fract(sin(step6 * 12.9898 + phase * 78.233) * 43758.5453));
+           float flicker = mix(1.0, wobble * dropout, flickers);
+
+           float glow = isLit * flicker;
+
            // most panes dark glass, a scattering warmly lit
            vec3 darkGlass = vec3(0.16, 0.20, 0.26);
            vec3 warm = vec3(1.0, 0.92, 0.66);
            vec3 cool = vec3(0.88, 0.95, 1.0);
-           vec3 glass = mix(darkGlass, mix(warm, cool, winHash(cell + 8.4)), step(0.62, lit));
+           vec3 glass = mix(darkGlass, mix(warm, cool, winHash(key + 8.4)), glow);
 
            gl_FragColor.rgb = mix(gl_FragColor.rgb, glass, pane * 0.85);
            // lit panes glow a little so they read at distance
-           gl_FragColor.rgb += warm * pane * step(0.62, lit) * 0.35;
+           gl_FragColor.rgb += warm * pane * glow * 0.35;
          }`,
       );
   };
   material.needsUpdate = true;
+
+  return (seconds: number) => {
+    uTime.value = seconds;
+  };
 }

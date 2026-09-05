@@ -72,8 +72,9 @@ export function useFlightControls(): React.RefObject<FlightInput> {
         // round the craft; a limit near half a turn makes it feel like it has
         // hit a wall just as you go to look behind you.
         input.current.lookYaw = drag.baseYaw - dx * 0.005;
+        // inverted: pushing the mouse up swings the camera up over the craft.
         // pitch stays limited, or the camera tumbles over the top
-        input.current.lookPitch = clamp(drag.basePitch - dy * 0.004, -1.15, 1.15);
+        input.current.lookPitch = clamp(drag.basePitch + dy * 0.004, -1.15, 1.15);
       }
     };
 
@@ -103,7 +104,11 @@ export function useFlightControls(): React.RefObject<FlightInput> {
 
       if (left || right || up || down) {
         input.current.turn = (right ? 1 : 0) - (left ? 1 : 0);
-        input.current.pitch = (down ? 1 : 0) - (up ? 1 : 0);
+        // Reversed again, by request: W now pushes the nose DOWN and S
+        // pulls it up — a stick you push forward to dive. Deliberately the
+        // opposite sign to the touch drag above, which stays a direct pull
+        // on the nose.
+        input.current.pitch = (up ? 1 : 0) - (down ? 1 : 0);
       } else if (!drag.steering) {
         input.current.turn = 0;
         input.current.pitch = 0;

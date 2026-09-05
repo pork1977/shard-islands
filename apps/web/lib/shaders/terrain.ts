@@ -26,14 +26,31 @@ export const TerrainMaterial = shaderMaterial(
     /** xy = city centre, z = radius, w = block size. */
     uCity: new THREE.Vector4(0, 0, 0, 34),
     uUrban: new THREE.Color("#8a8f96"),
+    // the desert: dune sand, sun-bleached crests, and the red rock the mesas
+    // are cut from
+    uDuneSand: new THREE.Color("#dcbc85"),
+    uDuneCrest: new THREE.Color("#f2e2b6"),
+    uRedRock: new THREE.Color("#a3623c"),
+    /** Silt under the great lake, so deep water reads as deep. */
+    uLakeBed: new THREE.Color("#1b4a5e"),
   },
   /* glsl */ `
+    // Both regions are baked per-vertex by the generator rather than
+    // recomputed here: the masks are noise-warped, and two implementations
+    // of the same warp in two languages drift apart.
+    attribute float aDesert;
+    attribute float aLake;
+
     varying vec3 vNormalW;
     varying vec3 vPos;
     varying float vDepth;
+    varying float vDesert;
+    varying float vLake;
 
     void main() {
       vPos = position;
+      vDesert = aDesert;
+      vLake = aLake;
       vNormalW = normalize(mat3(modelMatrix) * normal);
       vec4 world = modelMatrix * vec4(position, 1.0);
       vec4 mv = viewMatrix * world;
@@ -58,10 +75,16 @@ export const TerrainMaterial = shaderMaterial(
     uniform int uRoadCount;
     uniform vec4 uCity;
     uniform vec3 uUrban;
+    uniform vec3 uDuneSand;
+    uniform vec3 uDuneCrest;
+    uniform vec3 uRedRock;
+    uniform vec3 uLakeBed;
 
     varying vec3 vNormalW;
     varying vec3 vPos;
     varying float vDepth;
+    varying float vDesert;
+    varying float vLake;
 
     float hash(vec2 p) {
       return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -89,6 +112,14 @@ export const TerrainMaterial = shaderMaterial(
       // flat ground is grass, steep faces are exposed rock
       float steep = 1.0 - clamp(N.z, 0.0, 1.0);
 
+      // Detail smaller than a pixel is not detail, it is noise that crawls
+      // as the camera moves. Every high-frequency term below is faded out
+      // with distance: the canopy speckle has a three-metre period, so from
+      // three hundred metres up it is pure moiré. Coarse features keep their
+      // own, much longer, leash.
+      float detail = 1.0 - smoothstep(150.0, 460.0, vDepth);
+      float coarse = 1.0 - smoothstep(420.0, 1100.0, vDepth);
+
       // Biomes as distinct REGIONS with fairly crisp borders, not a smooth
       // blend. Read from the air, that separation into readable areas —
       // meadow, forest, farmland — is most of the stylised-map look; a soft
@@ -102,14 +133,14 @@ export const TerrainMaterial = shaderMaterial(
       // drier meadow elsewhere
       col = mix(col, uMeadow, smoothstep(0.44, 0.30, biome));
       // patchwork within a region so it is not one flat colour
-      col = mix(col, col * 1.14, step(0.55, mottle));
-      col = mix(col, col * 0.88, step(0.62, noise(vPos.xy * 0.05 + 4.0)));
+      col = mix(col, col * 1.14, step(0.55, mottle) * coarse);
+      col = mix(col, col * 0.88, step(0.62, noise(vPos.xy * 0.05 + 4.0)) * detail);
 
       // canopy speckle in the forest, which is what tree cover reads as from
       // altitude without placing a single tree
       float canopy = noise(vPos.xy * 0.34);
       col = mix(col, uDeepGrass * 0.72,
-                smoothstep(0.52, 0.58, biome) * smoothstep(0.45, 0.72, canopy) * 0.55);
+                smoothstep(0.52, 0.58, biome) * smoothstep(0.45, 0.72, canopy) * 0.55 * detail);
 
       // shoreline sand just above the waterline
       col = mix(uSand, col, smoothstep(uWaterHeight - 0.5, uWaterHeight + 7.0, h));
@@ -119,6 +150,30 @@ export const TerrainMaterial = shaderMaterial(
       col = mix(col, uRock, smoothstep(0.5, 0.82, steep));
       // snow caps
       col = mix(col, uSnow, smoothstep(0.80, 0.94, h / uMaxHeight) * (1.0 - steep * 0.5));
+
+      // The desert. Laid over the finished green palette rather than blended
+      // into it, so the boundary is the one the generator planted cactus to
+      // and there is no band of sandy grass in between.
+      if (vDesert > 0.001) {
+        vec3 sand = mix(uDuneSand, uDuneCrest, smoothstep(0.35, 0.72, noise(vPos.xy * 0.018)));
+        // wind ripples, running the same way the dunes do
+        float ripple = sin((vPos.x * 0.92 + vPos.y * 0.39) * 0.5 + noise(vPos.xy * 0.06) * 5.0);
+        sand *= 0.95 + 0.05 * ripple * detail;
+        // out here the only steep ground is a mesa wall, and it is bare rock
+        float wall = smoothstep(0.34, 0.6, steep);
+        sand = mix(sand, uRedRock, wall);
+        // strata banding, which is what reads as sedimentary rock from a
+        // distance rather than a brown cliff
+        sand = mix(sand, uRedRock * 0.72, wall * step(0.5, fract(h * 0.085)) * coarse);
+        // Committed rather than proportional: a half-sand, half-grass
+        // blend across the whole basin is what made this read as sage.
+        col = mix(col, sand, smoothstep(0.12, 0.5, vDesert));
+      }
+
+      // The lake bed darkens with depth under the water plane. Without it a
+      // huge lake is one flat blue sheet with no sense of a bottom.
+      col = mix(col, uLakeBed,
+                vLake * (1.0 - smoothstep(uWaterHeight - 2.0, uWaterHeight + 10.0, h)));
 
       // roads linking the settlements, laid on wherever the ground is gentle
       float road = 0.0;
@@ -141,11 +196,11 @@ export const TerrainMaterial = shaderMaterial(
 
       vec2 g = abs(fract((vPos.xy - uCity.xy) / uCity.w) - 0.5) * uCity.w;
       float streets = 1.0 - smoothstep(2.0, 4.2, min(g.x, g.y));
-      col = mix(col, uRoadColor * 0.82, streets * inCity * 0.9);
+      col = mix(col, uRoadColor * 0.82, streets * inCity * 0.9 * coarse);
 
       // roads do not climb cliffs
       road *= 1.0 - smoothstep(0.25, 0.5, steep);
-      col = mix(col, uRoadColor, road * 0.85);
+      col = mix(col, uRoadColor, road * 0.85 * coarse);
 
       // Dusk lighting: a cool dim ambient with a warm raking key, so lit
       // slopes go golden and shaded ones fall to deep blue. Much darker

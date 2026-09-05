@@ -6,13 +6,13 @@ import * as THREE from "three";
 import { SkyMaterial } from "@/lib/shaders/sky";
 import { TerrainMaterial } from "@/lib/shaders/terrain";
 import {
-  generateTerrain,
+  getTerrain,
   TERRAIN_BASE_Z,
   TERRAIN_MAX_HEIGHT,
   TERRAIN_SIZE,
   WATER_HEIGHT,
 } from "@/lib/world/generateTerrain";
-import { generateProps } from "@/lib/world/generateProps";
+import { getProps } from "@/lib/world/generateProps";
 import WorldProps from "@/components/world/WorldProps";
 import Monolith from "@/components/world/Monolith";
 import { useGameStore } from "@/lib/store/useGameStore";
@@ -78,12 +78,12 @@ function Sky({ reveal }: { reveal: React.RefObject<number> }) {
 
 function Land({ reveal }: { reveal: React.RefObject<number> }) {
   const materialRef = useRef<InstanceType<typeof TerrainMaterial>>(null);
-  const terrain = useMemo(() => generateTerrain(), []);
+  const terrain = useMemo(() => getTerrain(), []);
 
   // same generator the buildings use, so roads join the towns and the paved
   // ground lands under the city rather than beside it
   const layout = useMemo(() => {
-    const { roads: segs, city } = generateProps();
+    const { roads: segs, city } = getProps();
     const packed = Array.from({ length: 16 }, () => new THREE.Vector4(0, 0, 0, 0));
     segs.slice(0, 16).forEach((s, i) => packed[i].set(s[0], s[1], s[2], s[3]));
     return {
@@ -112,10 +112,20 @@ function Land({ reveal }: { reveal: React.RefObject<number> }) {
         />
       </mesh>
 
-      {/* standing water filling the low ground */}
+      {/* Standing water filling the low ground. The polygon offset settles
+          the shoreline, where the sheet and the ground it cuts through are
+          genuinely at the same height and would otherwise trade places from
+          frame to frame. */}
       <mesh position={[0, 0, TERRAIN_BASE_Z + WATER_HEIGHT]}>
         <planeGeometry args={[TERRAIN_SIZE, TERRAIN_SIZE]} />
-        <meshBasicMaterial color="#2d7fb8" transparent opacity={0.82} />
+        <meshBasicMaterial
+          color="#2d7fb8"
+          transparent
+          opacity={0.82}
+          polygonOffset
+          polygonOffsetFactor={-1}
+          polygonOffsetUnits={-2}
+        />
       </mesh>
     </>
   );
@@ -188,9 +198,9 @@ function Clouds({ texture }: { texture: THREE.Texture }) {
     // Layered decks through the whole descent, so the long fall keeps
     // passing something. Density thins near the ground so the landscape is
     // clear once flight begins.
-    for (let i = 0; i < 150; i++) {
+    for (let i = 0; i < 260; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const radius = Math.pow(Math.random(), 0.6) * 620;
+      const radius = Math.pow(Math.random(), 0.6) * 1100;
       const t = Math.random();
       out.push({
         position: [

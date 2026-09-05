@@ -122,9 +122,20 @@ export const ShardGlassMaterial = shaderMaterial(
 
         // blast hardest at the strike, and everything falls away from the
         // viewer into the void the camera is about to follow it into
+        // The debris has to stay just below the camera, and fan out around
+        // it. The camera's own descent accelerates hard: at the original
+        // launch speed it drew level with the glass a second and a half in
+        // and then stayed level for the rest of the fall, which parked every
+        // shard in the camera's own plane — off the edge of a view pointed
+        // at the ground — and read as the whole field blinking out at once.
+        // Simply making them fall harder is no better: they shrink to dark
+        // confetti hundreds of metres below. A firm initial shove downward
+        // and a much wider lateral spread keeps them a few dozen metres
+        // ahead of the lens and off to the sides, tumbling and catching the
+        // light for as long as they take to dissolve.
         vec3 velocity =
-            dir * (1.5 - aDist * 0.9) * (0.5 + aRandom.y)
-          + vec3(0.0, 0.0, -2.0 - aRandom.z * 2.2);
+            dir * (3.4 - aDist * 2.0) * (0.5 + aRandom.y)
+          + vec3(0.0, 0.0, -6.5 - aRandom.z * 3.5);
         vec3 displacement = velocity * fall + vec3(0.0, 0.0, -7.0) * fall * fall;
 
         pos = aCentroid + local + displacement;
@@ -215,10 +226,18 @@ export const ShardGlassMaterial = shaderMaterial(
       vec3 cutCol = uGlassColor * 0.6 + uLightColor * 0.25 + uGlowColor * exp(-vDist * 3.0) * 0.55;
       col = mix(col, cutCol, side * vCracked);
 
-      // Each piece dissolves as it tumbles away, rather than the whole sheet
-      // of glass being cut the instant the world takes over — that switch
-      // read as the debris harshly vanishing off the screen.
-      float alpha = 1.0 - smoothstep(0.9, 2.4, vFall);
+      // The debris field thins out; it does not switch off.
+      //
+      // Every piece used to fade over the same window (0.9 to 2.4), and
+      // since they all let go within about a second of each other, the whole
+      // sheet of debris evaporated together roughly half a second after the
+      // pane gave way — a hard cut from a screen full of tumbling glass to
+      // an empty sky. Each shard now gets its own start and its own
+      // duration, so pieces drop out a few at a time and the last of them
+      // are still falling alongside the camera most of the way down.
+      float fadeStart = 0.7 + vRandom.z * 2.2;
+      float fadeLength = 1.4 + vRandom.x * 2.2;
+      float alpha = 1.0 - smoothstep(fadeStart, fadeStart + fadeLength, vFall);
 
       // A tumbling piece is lit from two places: the cold source above, which
       // it flashes as it spins through the right angle, and the glow rising
@@ -226,11 +245,18 @@ export const ShardGlassMaterial = shaderMaterial(
       if (vFall > 0.0) {
         vec3 N = normalize(vNormal);
         vec3 L = normalize(vec3(-0.35, 0.5, 0.78));
+        // A broad glint as well as a tight one. Seen from above against a
+        // lit landscape, a piece that only flares at one exact angle reads
+        // as a dark speck for most of its fall — grit rather than glass.
         float glint = pow(max(dot(N, L), 0.0), 26.0);
-        col += uLightColor * glint * 1.5;
+        float sheen = pow(max(dot(N, L), 0.0), 3.0);
+        col += uLightColor * glint * 1.8;
+        col += uLightColor * sheen * 0.45;
         col += uGlowColor * max(0.0, -N.z) * 0.32;
-        // and it recedes into the dark as it falls away
-        col *= 1.0 / (1.0 + vFall * 0.55);
+        // and it recedes as it falls away. Gently: the piece has to stay
+        // visible for as long as it is still on screen, and the alpha above
+        // is what should be retiring it, not the exposure.
+        col *= 1.0 / (1.0 + vFall * 0.12);
       }
 
       gl_FragColor = vec4(col, alpha);
