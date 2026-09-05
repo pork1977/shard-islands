@@ -115,6 +115,21 @@ export class PlayerState extends Schema {
   @type("boolean") simulated = false;
 
   /**
+   * Nobody is at the controls.
+   *
+   * A browser tab left open stays connected forever, so without this its
+   * craft keeps being flown by the room — drifting around the map, sitting
+   * on the scoreboard, and being counted as another player in the sky. It
+   * is exactly how a phantom "P1" appears in a room with one person in it.
+   *
+   * Synced rather than handled by simply deleting the player, because
+   * somebody who tabs away for a moment should be able to come back to
+   * their own trail. Their craft is hidden, they are off the scoreboard,
+   * and they can neither cut nor be cut.
+   */
+  @type("boolean") away = false;
+
+  /**
    * The damped stick, which is simulation state rather than an input detail:
    * it carries between steps, so replaying inputs on top of an authoritative
    * state without it gives a different answer than the server got. Synced

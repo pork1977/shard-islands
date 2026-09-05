@@ -21,6 +21,7 @@ export default function SceneProbe() {
   const scene = useThree((s) => s.scene);
   const camera = useThree((s) => s.camera);
   const clock = useThree((s) => s.clock);
+  const gl = useThree((s) => s.gl);
 
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
@@ -31,12 +32,18 @@ export default function SceneProbe() {
     // "is this thing animating" is unanswerable without being able to read
     // the number the animation is reading.
     w.__shardClock = clock;
+    // The renderer, so a one-off frame can be drawn from a camera of your
+    // own choosing. The chase camera owns the real one and overwrites it
+    // every frame, which makes "point the camera at that and let me look"
+    // otherwise impossible.
+    w.__shardGl = gl;
     return () => {
       delete w.__shardScene;
       delete w.__shardCamera;
       delete w.__shardClock;
+      delete w.__shardGl;
     };
-  }, [scene, camera, clock]);
+  }, [scene, camera, clock, gl]);
 
   return null;
 }

@@ -14,14 +14,3 @@ body {
   position: fixed;
   inset: 0;
 }
-
-/*
-  No cursor once the glass is broken. The pointer is still live — dragging
-  it swings the camera round the craft — but a white arrow parked in the
-  middle of the sky is the one thing on screen that never belonged to the
-  world. It comes back the moment there is something to click.
-*/
-html.in-flight,
-html.in-flight * {
-  cursor: none;
-}

@@ -101,16 +101,21 @@ export function applyBuildingWindows(
            float lit = winHash(key + 3.1);
            float isLit = step(0.62, lit);
 
-           // A third of the occupied rooms have something moving in them.
+           // Roughly one occupied room in eight has something moving in it.
+           // It was one in three, and a whole town doing it at once read as
+           // a fault in the renderer rather than as life indoors — the point
+           // is the odd window catching your eye, not a light show.
+           //
            // Two motions overlaid: a slow wobble for firelight or a screen,
-           // and hard dropouts for someone passing between lamp and glass.
-           float flickers = step(0.66, winHash(key + 5.5));
+           // and occasional dropouts for someone passing between lamp and
+           // glass. Both gentler than they were, and slower.
+           float flickers = step(0.87, winHash(key + 5.5));
            float phase = winHash(key + 17.7);
-           float t = uTime * (0.6 + phase * 1.7) + phase * 60.0;
-           float wobble = 0.66 + 0.34 * sin(t * 5.3) * sin(t * 2.1 + 1.3);
-           float step6 = floor(t * 2.6);
-           float dropout = step(0.12, fract(sin(step6 * 12.9898 + phase * 78.233) * 43758.5453));
-           float flicker = mix(1.0, wobble * dropout, flickers);
+           float t = uTime * (0.35 + phase * 0.9) + phase * 60.0;
+           float wobble = 0.84 + 0.16 * sin(t * 3.1) * sin(t * 1.4 + 1.3);
+           float step6 = floor(t * 1.5);
+           float dropout = step(0.05, fract(sin(step6 * 12.9898 + phase * 78.233) * 43758.5453));
+           float flicker = mix(1.0, wobble * mix(0.45, 1.0, dropout), flickers);
 
            float glow = isLit * flicker;
 

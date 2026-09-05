@@ -107,6 +107,22 @@ const MAX_SAMPLES_PER_TICK = 12;
  */
 const SILENCE_BEFORE_COAST_MS = 250;
 
+/**
+ * How long a client can say nothing before the room decides nobody is
+ * flying, and then before it gives the seat back.
+ *
+ * A tab that is merely in the background still reports, just slowly, so
+ * these are far longer than any throttling produces. What they catch is the
+ * tab somebody opened, flew for a minute, and abandoned — which otherwise
+ * leaves a craft circling the map for as long as the browser stays open.
+ *
+ * Two stages rather than one, because a player who looks away for thirty
+ * seconds should get their own trail back when they return, and only a
+ * genuinely gone one should lose the seat.
+ */
+const AWAY_AFTER_MS = 30_000;
+const RELEASE_SEAT_AFTER_MS = 150_000;
+
 /** Ribbon length has to stay bounded, for the wire and for the renderer. */
 const MAX_TRAIL_LENGTH = 350;
 
@@ -161,6 +177,10 @@ export class ShardIslandsRoom extends Room<RoomState> {
       player.z = data.z;
       player.yaw = data.yaw;
       player.pitch = data.pitch;
+      // A falling player sends these instead of input, and is every bit as
+      // present as one who is flying.
+      rt.lastInputAt = Date.now();
+      if (player.away) player.away = false;
     });
 
     this.onMessage("spawn", (client, data: SpawnMessage) => {
@@ -200,6 +220,12 @@ export class ShardIslandsRoom extends Room<RoomState> {
           hover: !!sample.hover,
           dt: clamp(sample.dt, 0, MAX_SAMPLE_DT),
         });
+      }
+
+      const player = this.state.players.get(client.sessionId);
+      if (player?.away) {
+        player.away = false;
+        console.log(`[room] P${player.seat + 1} is back`);
       }
 
       // Ordered, because the wire does not promise it and replaying two
@@ -266,7 +292,7 @@ export class ShardIslandsRoom extends Room<RoomState> {
 
     this.state.players.forEach((player, id) => {
       const rt = this.runtime.get(id);
-      if (!rt || !rt.simulating) return;
+      if (!rt || !rt.simulating || player.away) return;
 
       // Where this tick started. Both core collection and tail-clip are
       // tested against the whole path flown, not just where the craft
@@ -320,6 +346,36 @@ export class ShardIslandsRoom extends Room<RoomState> {
 
     this.respawnCores(now);
     this.expireShards(now);
+    this.reapAbandoned(now);
+  }
+
+  /**
+   * Craft with nobody at the controls.
+   *
+   * Marked away first and dropped much later, so a moment's inattention is
+   * survivable and an abandoned tab is not. An away craft is not simulated,
+   * not drawn, not on the scoreboard, and out of every fight — it is as if
+   * that player had stepped outside, which is what has happened.
+   */
+  private reapAbandoned(now: number) {
+    this.state.players.forEach((player, id) => {
+      const rt = this.runtime.get(id);
+      if (!rt) return;
+
+      const silent = now - rt.lastInputAt;
+
+      if (!player.away && silent > AWAY_AFTER_MS) {
+        player.away = true;
+        console.log(`[room] P${player.seat + 1} went quiet — craft parked`);
+        return;
+      }
+
+      if (silent > RELEASE_SEAT_AFTER_MS) {
+        console.log(`[room] P${player.seat + 1} abandoned — seat released`);
+        this.state.players.delete(id);
+        this.runtime.delete(id);
+      }
+    });
   }
 
   private publish(player: PlayerState, rt: Runtime) {
@@ -356,7 +412,7 @@ export class ShardIslandsRoom extends Room<RoomState> {
 
     this.state.players.forEach((player, id) => {
       const rt = this.runtime.get(id);
-      if (!rt || !rt.simulating) {
+      if (!rt || !rt.simulating || player.away) {
         player.draft = 1;
         return;
       }
@@ -371,6 +427,7 @@ export class ShardIslandsRoom extends Room<RoomState> {
 
       this.state.players.forEach((leader, leaderId) => {
         if (leaderId === id) return;
+        if (leader.away) return; // a parked craft has no slipstream
         const trail = leader.trail;
         if (!trail || trail.length < 2) return;
 
@@ -540,7 +597,7 @@ export class ShardIslandsRoom extends Room<RoomState> {
 
     this.state.players.forEach((clipper, clipperId) => {
       const crt = this.runtime.get(clipperId);
-      if (!crt || !crt.simulating) return;
+      if (!crt || !crt.simulating || clipper.away) return;
 
       // You cut by flying THROUGH something. A craft holding station is not
       // cutting anything, however it happens to be pointed — without this,
@@ -560,6 +617,7 @@ export class ShardIslandsRoom extends Room<RoomState> {
 
       this.state.players.forEach((victim, victimId) => {
         if (victimId === clipperId) return;
+        if (victim.away) return;
         if (victim.colour === clipper.colour) return;
 
         const vrt = this.runtime.get(victimId);

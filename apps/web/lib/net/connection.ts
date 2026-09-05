@@ -290,8 +290,12 @@ function sampleRemotes(nowMs: number) {
 
   const seen = new Set<string>();
 
-  room.state.players.forEach((player: RemoteSnapshot, id: string) => {
+  room.state.players.forEach((player: RemoteSnapshot & { away: boolean }, id: string) => {
     if (id === connection.selfId) return;
+    // Nobody at the controls. The room has parked their craft; drawing it
+    // would put a motionless glider in the sky that cannot be interacted
+    // with, which is worse than an empty piece of sky.
+    if (player.away) return;
     // Joined but never reported. Their schema entry is still all zeroes, and
     // the origin is open sky — drawing them there is worse than not yet
     // drawing them at all.
@@ -430,9 +434,12 @@ export function readRoster(into: RosterEntry[]): RosterEntry[] {
 
   room.state.players.forEach(
     (
-      player: { seat: number; colour: number; trailLength: number },
+      player: { seat: number; colour: number; trailLength: number; away: boolean },
       id: string,
     ) => {
+      // An abandoned craft is not a contender. Leaving it on the board is
+      // how a room with one person in it appears to have two.
+      if (player.away && id !== connection.selfId) return;
       into.push({
         id,
         seat: player.seat,
@@ -677,6 +684,10 @@ export function readClipStanding(): ClipStanding | null {
 export function playerCount(): number {
   const room = connection.room;
   if (!room?.state?.players) return 1;
-  return room.state.players.size;
+  let flying = 0;
+  room.state.players.forEach((player: { away: boolean }) => {
+    if (!player.away) flying++;
+  });
+  return Math.max(1, flying);
 }
 
