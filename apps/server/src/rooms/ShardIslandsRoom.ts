@@ -1,4 +1,4 @@
-import { Room, Client } from "colyseus";
+import { Room, type Client } from "@colyseus/core";
 import { ROOM, SERVER_TICK_RATE_HZ, TRAIL } from "@shard-islands/shared";
 import { PlayerState, RoomState, TrailPoint } from "../schema/RoomState.js";
 
