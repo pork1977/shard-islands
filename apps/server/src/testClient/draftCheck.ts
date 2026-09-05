@@ -1,5 +1,6 @@
-import { Client, type Room } from "colyseus.js";
+import { type Room } from "colyseus.js";
 import { DRAFT, FLIGHT_ALTITUDE } from "@shard-islands/shared";
+import { colourOf, join, joinWithColour, leaveAll, seatOf } from "./lobby.js";
 
 /**
  * Does flying in somebody's wake actually pull you along — and does your own
@@ -10,24 +11,20 @@ import { DRAFT, FLIGHT_ALTITUDE } from "@shard-islands/shared";
  * flown far enough for its trail to reach them, both followers are inside
  * it, and the room should be giving them different multipliers.
  *
- * The ally is seat 8. Colours are seat % 8, so nine clients have to join
- * before two of them share one — which is exactly why this test is a script
- * and not two people with two browsers.
+ * Colours are seat % 8, so several clients have to join before two of them
+ * share one — which is exactly why this test is a script and not two people
+ * with two browsers. The ally is chosen BY COLOUR rather than by counting to
+ * eight: a room with anybody already in it shifts every seat, and this test
+ * used to fail for that reason alone.
  *
  *   pnpm --filter server exec tsx src/testClient/draftCheck.ts
  */
 
-const ENDPOINT = process.env.GAME_SERVER_URL ?? "ws://localhost:2567";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const ALTITUDE = FLIGHT_ALTITUDE;
 const SECONDS = 4;
 const FRAME_DT = 1 / 60;
-
-async function join(): Promise<Room> {
-  const client = new Client(ENDPOINT);
-  return client.joinOrCreate("shard_islands");
-}
 
 /** Straight and level, on the same heading as everyone else in the line. */
 function spawnAt(room: Room, x: number, yaw = 0, speed = 26) {
@@ -43,20 +40,32 @@ function spawnAt(room: Room, x: number, yaw = 0, speed = 26) {
 }
 
 async function main() {
-  // Nine seats, so the last one wraps onto the leader's colour.
-  const rooms: Room[] = [];
-  for (let i = 0; i < 9; i++) rooms.push(await join());
+  const leader = await join();
+  const leaderColour = colourOf(leader);
 
-  const leader = rooms[0];
-  const stranger = rooms[1];
-  const ally = rooms[8];
+  // Somebody of a different colour to sit in the leader's wake...
+  const strangerJoin = await joinWithColour(leaderColour, false);
+  const stranger = strangerJoin.room;
+  // ...and somebody of the SAME colour further back, which is what takes
+  // several joins to find.
+  const allyJoin = await joinWithColour(leaderColour, true);
+  const ally = allyJoin.room;
+
   // Parked directly on the leader's line but pointed across it. Being in
   // somebody's wake is not enough; without the heading test this would be
   // the cheapest free boost in the game.
-  const crosser = rooms[2];
+  const crosserJoin = await joinWithColour(leaderColour, false);
+  const crosser = crosserJoin.room;
 
-  const seatOf = (room: Room) =>
-    (room.state.players.get(room.sessionId) as { seat: number } | undefined)?.seat;
+  const rooms: Room[] = [
+    leader,
+    stranger,
+    ally,
+    crosser,
+    ...strangerJoin.padding,
+    ...allyJoin.padding,
+    ...crosserJoin.padding,
+  ];
 
   // Only these four are spawned. The rest hold seats and are never
   // simulated, so they lay no trail and cannot interfere.
@@ -104,7 +113,7 @@ async function main() {
   const crosserDraft = draftOf(crosser);
   console.log(`crossing draft   ${crosserDraft.toFixed(2)} (expected 1.00 — wrong heading)`);
 
-  for (const room of rooms) await room.leave();
+  await leaveAll(rooms);
 
   const ok =
     Math.abs(leaderDraft - 1) < 0.001 &&

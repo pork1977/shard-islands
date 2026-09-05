@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { extend, useFrame, type ThreeElements } from "@react-three/fiber";
 import * as THREE from "three";
 import { generateGlider } from "@/lib/world/generateGlider";
 import { GliderCraftMaterial } from "@/lib/shaders/gliderCraft";
 import { useFlightControls } from "@/components/controllers/useFlightControls";
-import { flushInputs, readSelfSnapshot } from "@/lib/net/connection";
+import { flushInputs, readBeacon, readSelfSnapshot } from "@/lib/net/connection";
 import { playerState, pushTrailPoint } from "@/lib/net/playerState";
 import { predictStep, reconcile } from "@/lib/net/prediction";
 import TrailRibbon from "./TrailRibbon";
@@ -48,6 +48,18 @@ export default function PlayerGlider() {
   const lastAck = useRef(-1);
   /** Eased, so the downwash fades in and out rather than switching. */
   const draft = useRef(0);
+  /**
+   * Whether this craft is holding the Beacon's charge.
+   *
+   * State rather than a ref, because it changes the ribbon's material and
+   * that is decided at render. It changes twice a minute at most.
+   */
+  const [overcharged, setOvercharged] = useState(false);
+  useEffect(() => {
+    const poll = setInterval(() => setOvercharged(readBeacon().mine), 200);
+    return () => clearInterval(poll);
+  }, []);
+
   /** 0 the instant flight begins, 1 once the chase camera has taken over. */
   const handover = useRef(0);
   const seeded = useRef(false);
@@ -190,7 +202,13 @@ export default function PlayerGlider() {
 
       {/* the trail lives in world space — parenting it to the craft would
           drag the whole tail around every time the nose turns */}
-      <TrailRibbon points={() => playerState.trail} width={TRAIL.baseThickness * 1.15} />
+      {/* white hot while overcharged: your own wake is cutting people, and
+          you need to be able to see where you have put it */}
+      <TrailRibbon
+        points={() => playerState.trail}
+        width={TRAIL.baseThickness * (overcharged ? 1.7 : 1.15)}
+        {...(overcharged ? { core: "#ffffff", tail: "#ff9d2b" } : {})}
+      />
     </>
   );
 }

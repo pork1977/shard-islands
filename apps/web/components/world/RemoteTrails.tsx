@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ROOM } from "@shard-islands/shared";
-import { readTrailForSeat } from "@/lib/net/connection";
+import { readOvercharged, readTrailForSeat } from "@/lib/net/connection";
 import TrailRibbon from "./TrailRibbon";
 import { TRAIL } from "@shard-islands/shared";
 
@@ -48,24 +48,55 @@ const SEAT_TAILS = [
   "#5b6a8f",
 ];
 
+/**
+ * A live wake, drawn white hot.
+ *
+ * This is not decoration. While a craft is overcharged its trail cuts
+ * anybody who touches it, so the ribbon has stopped being a scoreboard and
+ * become a hazard — and a hazard that looks like every other ribbon is a
+ * trap. Anything that changes what a line in the sky DOES has to change
+ * what it looks like.
+ */
+const LIVE_CORE = "#ffffff";
+const LIVE_TAIL = "#ff9d2b";
+
 export default function RemoteTrails() {
   const seats = useMemo(
     () => Array.from({ length: ROOM.maxPlayers }, (_, seat) => seat),
     [],
   );
 
+  // Polled and held in state rather than read per frame, because the tint
+  // is a material property set at render: it changes a handful of times a
+  // minute, so a re-render when it does is cheaper than any alternative.
+  const [live, setLive] = useState<number[]>([]);
+  useEffect(() => {
+    const seen = new Set<number>();
+    const poll = setInterval(() => {
+      readOvercharged(seen);
+      setLive((was) => {
+        if (was.length === seen.size && was.every((s) => seen.has(s))) return was;
+        return [...seen];
+      });
+    }, 200);
+    return () => clearInterval(poll);
+  }, []);
+
   return (
     <group>
-      {seats.map((seat) => (
-        <TrailRibbon
-          key={seat}
-          points={() => readTrailForSeat(seat, performance.now())}
-          width={TRAIL.baseThickness * 1.15}
-          core={SEAT_CORES[seat % SEAT_CORES.length]}
-          tail={SEAT_TAILS[seat % SEAT_TAILS.length]}
-          opacity={0.85}
-        />
-      ))}
+      {seats.map((seat) => {
+        const hot = live.includes(seat);
+        return (
+          <TrailRibbon
+            key={seat}
+            points={() => readTrailForSeat(seat, performance.now())}
+            width={TRAIL.baseThickness * (hot ? 1.7 : 1.15)}
+            core={hot ? LIVE_CORE : SEAT_CORES[seat % SEAT_CORES.length]}
+            tail={hot ? LIVE_TAIL : SEAT_TAILS[seat % SEAT_TAILS.length]}
+            opacity={hot ? 1 : 0.85}
+          />
+        );
+      })}
     </group>
   );
 }

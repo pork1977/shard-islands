@@ -37,6 +37,30 @@ export class ClipShard extends Schema {
   @type("uint8") colour = 0;
 }
 
+/**
+ * The Beacon's own state.
+ *
+ * All of it synced, including the charge fraction, because the charging is
+ * as much a part of the event as the opening — a ring filling up on the
+ * horizon is what tells players it is worth setting off now, and a player
+ * who cannot see it coming can only ever arrive late.
+ */
+export class BeaconState extends Schema {
+  /** 0 to 1. */
+  @type("float32") charge = 0;
+
+  /** 0 charging, 1 open, 2 spent and cooling down. */
+  @type("uint8") phase = 0;
+
+  /** Milliseconds left in the current phase, for the countdown ring. */
+  @type("uint16") phaseMsLeft = 0;
+
+  /** Who is overcharged right now, empty when nobody is. */
+  @type("string") holderId = "";
+  @type("uint8") holderSeat = 0;
+  @type("uint16") overchargeMsLeft = 0;
+}
+
 export class PlayerState extends Schema {
   @type("string") id = "";
 
@@ -84,6 +108,16 @@ export class PlayerState extends Schema {
 
   /** Cuts this player has landed, for their own scoreline. */
   @type("uint16") clipsMade = 0;
+
+  /**
+   * Holding the Beacon's charge.
+   *
+   * Kept on the player as well as on the Beacon, because every other craft
+   * in the sky needs to know at a glance — an overcharged craft's wake cuts
+   * anyone who touches it, and being unable to tell which trail that is
+   * would make it a trap rather than a threat.
+   */
+  @type("boolean") overcharged = false;
 
   /**
    * Milliseconds of protection left after being cut. Synced so the player
@@ -161,6 +195,9 @@ export class RoomState extends Schema {
    * enough.
    */
   @type([ClipShard]) shards = new ArraySchema<ClipShard>();
+
+  /** The one thing on the map everybody can see at once. */
+  @type(BeaconState) beacon = new BeaconState();
 
   /** Server tick count, useful for debugging desync. */
   @type("uint32") tick = 0;

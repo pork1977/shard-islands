@@ -90,6 +90,17 @@ export const CLIP = {
   maxHeadingAgreement: 0.35,
   /** Grace after being cut, so nobody is chain-clipped down to nothing. */
   immunityMs: 2600,
+  /**
+   * What flying into an overcharged craft's live wake costs, as a fraction
+   * of the victim's SCORE rather than of their ribbon.
+   *
+   * An ordinary cut takes what it geometrically severs, which is right: a
+   * short ribbon genuinely has less to lose. A live wake is not a cut in
+   * the same sense — it is a flat punishment for touching the wire — and
+   * charging it against ribbon length let a craft whose ribbon had not yet
+   * caught up with its score walk away having lost a single point.
+   */
+  liveWakeCost: 0.6,
   /** No cut leaves a player with less than this. */
   minTrailLength: 14,
   /**

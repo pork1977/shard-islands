@@ -1,5 +1,6 @@
-import { Client, type Room } from "colyseus.js";
+import { type Room } from "colyseus.js";
 import { CLIP, FLIGHT_ALTITUDE } from "@shard-islands/shared";
+import { colourOf, join, joinWithColour, leaveAll } from "./lobby.js";
 
 /**
  * The tail-clip regression harness the plan asks for at this phase.
@@ -14,7 +15,6 @@ import { CLIP, FLIGHT_ALTITUDE } from "@shard-islands/shared";
  *   pnpm --filter server exec tsx src/testClient/clipCheck.ts
  */
 
-const ENDPOINT = process.env.GAME_SERVER_URL ?? "ws://localhost:2567";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const ALT = FLIGHT_ALTITUDE;
@@ -45,10 +45,6 @@ interface Seen {
   x: number;
   y: number;
   draft: number;
-}
-
-async function join(): Promise<Room> {
-  return new Client(ENDPOINT).joinOrCreate("shard_islands");
 }
 
 function look(room: Room): Seen {
@@ -102,14 +98,14 @@ async function fly(rooms: Room[], frames: number, seqFrom: number, boosting = fa
 /**
  * One pass at a trail.
  *
- * `extraSeats` pads the room so the clipper lands on a seat whose colour
- * matches the victim's — the only way to test the same-colour rule, since
- * colour is seat % 8.
+ * `sameColour` says what the clipper has to be. Finding one is a matter of
+ * joining until a colour comes up, not of counting seats: colour is
+ * seat % 8, and anybody already in the room shifts every seat along.
  */
 async function pass(opts: {
   label: string;
   lane: number;
-  extraSeats: number;
+  sameColour: boolean;
   /** PI/2 crosses the trail; 0 follows it. */
   clipperYaw: number;
   clipperY: number;
@@ -118,9 +114,9 @@ async function pass(opts: {
   burst?: boolean;
 }) {
   const victim = await join();
-  const padding: Room[] = [];
-  for (let i = 0; i < opts.extraSeats; i++) padding.push(await join());
-  const clipper = await join();
+  const found = await joinWithColour(colourOf(victim), opts.sameColour);
+  const clipper = found.room;
+  const padding = found.padding;
 
   // The victim lays a long straight line down its lane.
   spawn(victim, 0, opts.lane, 0, 26, VICTIM_TRAIL_LENGTH);
@@ -181,9 +177,7 @@ async function pass(opts: {
   const shards =
     (clipper.state.shards as unknown as { length: number }).length - shardsBefore;
 
-  await victim.leave();
-  await clipper.leave();
-  for (const p of padding) await p.leave();
+  await leaveAll([victim, clipper, ...padding]);
 
   console.log(
     `${opts.label.padEnd(18)} victim P${before.seat + 1}/c${before.colour}` +
@@ -220,7 +214,8 @@ async function pass(opts: {
  */
 async function collectAShard() {
   const victim = await join();
-  const clipper = await join();
+  const found = await joinWithColour(colourOf(victim), false);
+  const clipper = found.room;
   // Joined in advance: once the cut lands there is only about a second and
   // a half before the shards arm, which is not enough time to negotiate a
   // new connection.
@@ -260,9 +255,7 @@ async function collectAShard() {
         ` cuts ${look(victim).clipsTaken}` +
         ` shards ${before} -> ${shardsNow().length}`,
     );
-    await victim.leave();
-    await clipper.leave();
-    await scavenger.leave();
+    await leaveAll([victim, clipper, scavenger, ...found.padding]);
     return { ok: false, why: "no cut happened, so nothing to collect" };
   }
 
@@ -302,9 +295,7 @@ async function collectAShard() {
 
   const after = look(scavenger).trailLength;
 
-  await victim.leave();
-  await clipper.leave();
-  await scavenger.leave();
+  await leaveAll([victim, clipper, scavenger, ...found.padding]);
 
   const heldBack = duringArming === startTrail;
   const collected = after >= startTrail + target.value;
@@ -336,7 +327,7 @@ async function main() {
   const crossed = await pass({
     label: "rival crosses",
     lane: LANES[0],
-    extraSeats: 0,
+    sameColour: false,
     clipperYaw: Math.PI / 2,
     clipperY: -40,
     clipperSpeed: 26,
@@ -348,7 +339,7 @@ async function main() {
   const allied = await pass({
     label: "ally crosses",
     lane: LANES[1],
-    extraSeats: 7,
+    sameColour: true,
     clipperYaw: Math.PI / 2,
     clipperY: -40,
     clipperSpeed: 26,
@@ -361,7 +352,7 @@ async function main() {
   const followed = await pass({
     label: "rival follows",
     lane: LANES[2],
-    extraSeats: 0,
+    sameColour: false,
     clipperYaw: 0,
     clipperY: 0,
     clipperSpeed: 26,
@@ -372,7 +363,7 @@ async function main() {
   const tunnelled = await pass({
     label: "rival jumps it",
     lane: LANES[3],
-    extraSeats: 0,
+    sameColour: false,
     clipperYaw: Math.PI / 2,
     clipperY: -90,
     clipperSpeed: 400,

@@ -3,6 +3,8 @@ import {
   ROOM,
   SERVER_TICK_RATE_HZ,
   TRAIL,
+  BEACON,
+  beaconSite,
   CLIP,
   CORE_PICKUP_RADIUS,
   CORE_RESPAWN_MS,
@@ -157,6 +159,11 @@ export class ShardIslandsRoom extends Room<RoomState> {
   /** Arming and expiry for each live shard, keyed by its id. */
   private shardTiming = new Map<number, ShardTiming>();
   private nextShardId = 1;
+
+  /** When the Beacon's current phase ends. */
+  private beaconPhaseEndsAt = 0;
+  /** When the current overcharge runs out. */
+  private overchargeEndsAt = 0;
 
   onCreate() {
     this.setState(new RoomState());
@@ -334,6 +341,7 @@ export class ShardIslandsRoom extends Room<RoomState> {
 
       this.collectCores(player, rt, rt.fromX, rt.fromY, rt.fromZ);
       this.collectShards(player, rt, now);
+      this.claimBeacon(player, rt, now);
       this.publish(player, rt);
       this.appendTrail(player);
 
@@ -347,6 +355,146 @@ export class ShardIslandsRoom extends Room<RoomState> {
     this.respawnCores(now);
     this.expireShards(now);
     this.reapAbandoned(now);
+    this.stepBeacon(now);
+  }
+
+  /**
+   * The Beacon: charge, open, claim, cool down.
+   *
+   * The charge rate is the cooperative half of this — it fills far faster
+   * with craft circling it than it ever does on its own, so a room that
+   * gathers gets the event several times more often than a room that
+   * scatters. Nobody is forced to cooperate and nobody is rewarded directly
+   * for it; they simply make the thing they all want happen sooner.
+   *
+   * What follows is deliberately winner-takes-all. A prize everyone gets
+   * for turning up is not a prize, and the whole point is a race worth
+   * losing. The consolation for losing is that the sky now contains the
+   * most valuable target in the game.
+   */
+  private stepBeacon(now: number) {
+    const beacon = this.state.beacon;
+
+    // The overcharge runs on its own clock: it outlives the opening, and
+    // has to end even if the Beacon has already begun recharging.
+    if (beacon.holderId) {
+      const left = this.overchargeEndsAt - now;
+      if (left <= 0) {
+        const holder = this.state.players.get(beacon.holderId);
+        if (holder) holder.overcharged = false;
+        console.log(`[room] overcharge on P${beacon.holderSeat + 1} expired`);
+        beacon.holderId = "";
+        beacon.overchargeMsLeft = 0;
+      } else {
+        beacon.overchargeMsLeft = Math.min(65535, left);
+      }
+    }
+
+    if (beacon.phase === 1) {
+      const left = this.beaconPhaseEndsAt - now;
+      beacon.phaseMsLeft = Math.max(0, Math.min(65535, left));
+      if (left <= 0) {
+        // Nobody came. It does not start again from nothing.
+        console.log("[room] beacon closed unclaimed");
+        beacon.phase = 0;
+        beacon.charge = BEACON.unclaimedCarry;
+        beacon.phaseMsLeft = 0;
+      }
+      return;
+    }
+
+    if (beacon.phase === 2) {
+      const left = this.beaconPhaseEndsAt - now;
+      beacon.phaseMsLeft = Math.max(0, Math.min(65535, left));
+      if (left <= 0) {
+        beacon.phase = 0;
+        beacon.charge = 0;
+        beacon.phaseMsLeft = 0;
+      }
+      return;
+    }
+
+    // Charging. Count who is close enough to be helping.
+    const site = beaconSite();
+    const gatherSq = BEACON.gatherRadius * BEACON.gatherRadius;
+    let gathered = 0;
+
+    this.state.players.forEach((player) => {
+      if (!player.simulated || player.away) return;
+      const dx = player.x - site.x;
+      const dy = player.y - site.y;
+      if (dx * dx + dy * dy <= gatherSq) gathered++;
+    });
+
+    const rate = Math.min(
+      BEACON.maxRateMultiplier,
+      1 + gathered * BEACON.perPilotRate,
+    );
+    beacon.charge = Math.min(
+      1,
+      beacon.charge + rate / (BEACON.chargeSecondsAlone * SERVER_TICK_RATE_HZ),
+    );
+
+    if (beacon.charge >= 1) {
+      beacon.phase = 1;
+      this.beaconPhaseEndsAt = now + BEACON.openMs;
+      beacon.phaseMsLeft = BEACON.openMs;
+      console.log(`[room] beacon OPEN (${gathered} nearby)`);
+    }
+  }
+
+  /**
+   * Did anybody reach the core?
+   *
+   * Swept along the tick's movement like every other pickup in the game —
+   * this one especially, because it is reached in a dive at the highest
+   * speed anybody ever flies, which is exactly the case a point check
+   * misses.
+   */
+  private claimBeacon(player: PlayerState, rt: Runtime, now: number) {
+    const beacon = this.state.beacon;
+    if (beacon.phase !== 1) return;
+
+    const site = beaconSite();
+    const r = BEACON.claimRadius;
+
+    const px = rt.sim.x - rt.fromX;
+    const py = rt.sim.y - rt.fromY;
+    const pz = rt.sim.z - rt.fromZ;
+    const pathSq = px * px + py * py + pz * pz;
+
+    let t = 0;
+    if (pathSq > 1e-9) {
+      t =
+        ((site.x - rt.fromX) * px +
+          (site.y - rt.fromY) * py +
+          (site.coreZ - rt.fromZ) * pz) /
+        pathSq;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+    }
+    const dx = site.x - (rt.fromX + px * t);
+    const dy = site.y - (rt.fromY + py * t);
+    const dz = site.coreZ - (rt.fromZ + pz * t);
+    if (dx * dx + dy * dy + dz * dz > r * r) return;
+
+    // Whoever held it before loses it the instant somebody else takes it.
+    if (beacon.holderId && beacon.holderId !== player.id) {
+      const previous = this.state.players.get(beacon.holderId);
+      if (previous) previous.overcharged = false;
+    }
+
+    beacon.phase = 2;
+    beacon.charge = 0;
+    this.beaconPhaseEndsAt = now + BEACON.cooldownMs;
+    beacon.phaseMsLeft = BEACON.cooldownMs;
+
+    beacon.holderId = player.id;
+    beacon.holderSeat = player.seat;
+    beacon.overchargeMsLeft = BEACON.overchargeMs;
+    this.overchargeEndsAt = now + BEACON.overchargeMs;
+    player.overcharged = true;
+
+    console.log(`[room] P${player.seat + 1} TOOK THE BEACON`);
   }
 
   /**
@@ -545,7 +693,7 @@ export class ShardIslandsRoom extends Room<RoomState> {
       this.coreReturnsAt[i] = Date.now() + CORE_RESPAWN_MS;
       player.trailLength = Math.min(
         MAX_TRAIL_LENGTH,
-        player.trailLength + CORE_TRAIL_VALUE,
+        player.trailLength + CORE_TRAIL_VALUE * this.yieldFor(player),
       );
       player.cores += 1;
     }
@@ -593,6 +741,12 @@ export class ShardIslandsRoom extends Room<RoomState> {
       x: number;
       y: number;
       z: number;
+      /**
+       * True when the cut was made by an overcharged craft's live wake, in
+       * which case `index` refers to the wake that was touched and not to
+       * the trail actually being severed.
+       */
+      onOwnTrail: boolean;
     }[] = [];
 
     this.state.players.forEach((clipper, clipperId) => {
@@ -622,9 +776,20 @@ export class ShardIslandsRoom extends Room<RoomState> {
 
         const vrt = this.runtime.get(victimId);
         if (!vrt || !vrt.simulating) return;
-        if (now < vrt.immuneUntil) return;
-        // Nothing to cut off a craft that has barely started laying one.
+        // Their grace period protects THEM. An overcharged craft's wake is
+        // not being cut, it is doing the cutting, so grace has no bearing
+        // on it — the clipper's own grace is checked where the cut lands.
+        if (!victim.overcharged && now < vrt.immuneUntil) return;
+        // Nothing to touch on a craft that has barely started laying one.
         if (victim.trail.length < 4) return;
+
+        // An overcharged craft's wake is LIVE: touching it at all cuts
+        // YOU, whichever way you were going. That inversion is the whole
+        // prize — for twenty seconds one player's trail is a line across
+        // the sky that nobody else can cross, so the counterplay is to
+        // leave them alone and go and earn elsewhere, or to share their
+        // colour, which is still safe.
+        const live = victim.overcharged;
 
         const cut = findCut(
           crt.fromX,
@@ -638,17 +803,32 @@ export class ShardIslandsRoom extends Room<RoomState> {
           fz,
           victim.trail,
           vrt.trailIndex,
+          live,
         );
         if (!cut) return;
 
-        cuts.push({
-          victimId,
-          clipperId,
-          index: cut.index,
-          x: cut.x,
-          y: cut.y,
-          z: cut.z,
-        });
+        // Same collision, opposite outcome.
+        cuts.push(
+          live
+            ? {
+                victimId: clipperId,
+                clipperId: victimId,
+                index: cut.index,
+                x: cut.x,
+                y: cut.y,
+                z: cut.z,
+                onOwnTrail: true,
+              }
+            : {
+                victimId,
+                clipperId,
+                index: cut.index,
+                x: cut.x,
+                y: cut.y,
+                z: cut.z,
+                onOwnTrail: false,
+              },
+        );
       });
     });
 
@@ -670,6 +850,7 @@ export class ShardIslandsRoom extends Room<RoomState> {
       x: number;
       y: number;
       z: number;
+      onOwnTrail: boolean;
     },
     now: number,
   ) {
@@ -677,18 +858,35 @@ export class ShardIslandsRoom extends Room<RoomState> {
     const vrt = this.runtime.get(c.victimId);
     if (!victim || !vrt || now < vrt.immuneUntil) return;
 
-    // Everything from the tail up to the cut. One point always survives, so
-    // a craft is never left with no ribbon at all.
-    const lost = Math.min(c.index + 1, victim.trail.length - 1);
-    if (lost < 1) return;
+    const points = victim.trail.length;
+
+    // Two different quantities, and conflating them was a real bug.
+    //
+    // `cutPoints` is how much RIBBON goes. For an ordinary cut that is the
+    // whole story: you sever what you fly through, and one point always
+    // survives so a craft is never left with nothing at all.
+    //
+    // `scoreLost` is what it COSTS. For an ordinary cut the two are the
+    // same — the ribbon is the score. A live-wake cut is not a geometric
+    // severing at all, it is a flat penalty for touching the wire, and
+    // charging it against ribbon length let a craft whose ribbon had not
+    // caught up with its score lose a single point for flying into one.
+    const cutPoints = c.onOwnTrail
+      ? Math.min(points - 1, Math.max(1, Math.round(points * CLIP.liveWakeCost)))
+      : Math.min(c.index + 1, points - 1);
+    if (cutPoints < 1) return;
+
+    const scoreLost = c.onOwnTrail
+      ? Math.max(1, Math.round(victim.trailLength * CLIP.liveWakeCost))
+      : cutPoints;
 
     // Scattered before the trail is shortened — the shards lie along the
     // piece that was taken, which is what makes a kill readable from across
     // the sky as a line of somebody else's colour hanging in the air.
-    this.scatterShards(victim, lost, now);
+    this.scatterShards(victim, cutPoints, scoreLost, now);
 
-    victim.trail.splice(0, lost);
-    victim.trailLength = Math.max(CLIP.minTrailLength, victim.trailLength - lost);
+    victim.trail.splice(0, cutPoints);
+    victim.trailLength = Math.max(CLIP.minTrailLength, victim.trailLength - scoreLost);
 
     victim.clipsTaken += 1;
     victim.clipX = c.x;
@@ -702,7 +900,8 @@ export class ShardIslandsRoom extends Room<RoomState> {
     if (clipper) clipper.clipsMade += 1;
 
     console.log(
-      `[room] clip P${(clipper?.seat ?? 0) + 1} cut P${victim.seat + 1} for ${lost}`,
+      `[room] ${c.onOwnTrail ? "live wake" : "clip"} P${(clipper?.seat ?? 0) + 1}` +
+        ` cut P${victim.seat + 1} for ${scoreLost}`,
     );
   }
 
@@ -718,15 +917,21 @@ export class ShardIslandsRoom extends Room<RoomState> {
    * are a good forty metres past the cut before anything is takeable, and
    * both have to turn and come back for it. That turn is the fight.
    */
-  private scatterShards(victim: PlayerState, lost: number, now: number) {
-    const total = Math.round(lost * CLIP.shardYield);
+  private scatterShards(
+    victim: PlayerState,
+    cutPoints: number,
+    scoreLost: number,
+    now: number,
+  ) {
+    // Worth what the victim actually lost, laid out along what was severed.
+    const total = Math.round(scoreLost * CLIP.shardYield);
     if (total < 1) return;
 
     const count = Math.max(1, Math.min(CLIP.maxShards, Math.round(total / 4)));
     const per = Math.max(1, Math.min(255, Math.floor(total / count)));
 
     for (let n = 0; n < count; n++) {
-      const at = Math.min(lost - 1, Math.floor(((n + 0.5) / count) * lost));
+      const at = Math.min(cutPoints - 1, Math.floor(((n + 0.5) / count) * cutPoints));
       const p = victim.trail[at];
       if (!p) continue;
 
@@ -786,10 +991,18 @@ export class ShardIslandsRoom extends Room<RoomState> {
       const dz = shard.z - (rt.fromZ + pz * t);
       if (dx * dx + dy * dy + dz * dz > rSq) continue;
 
-      player.trailLength = Math.min(MAX_TRAIL_LENGTH, player.trailLength + shard.value);
+      player.trailLength = Math.min(
+        MAX_TRAIL_LENGTH,
+        player.trailLength + shard.value * this.yieldFor(player),
+      );
       this.shardTiming.delete(shard.id);
       shards.splice(i, 1);
     }
+  }
+
+  /** What one point of pickup is worth to this player right now. */
+  private yieldFor(player: PlayerState) {
+    return player.overcharged ? BEACON.overchargeYield : 1;
   }
 
   /** Shards nobody came back for. */

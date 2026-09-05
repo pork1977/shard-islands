@@ -138,6 +138,14 @@ export function findCut(
   fz: number,
   trail: TrailLike,
   index: TrailIndex,
+  /**
+   * Skip the crossing test.
+   *
+   * Set for an overcharged craft's live wake, where merely touching the
+   * ribbon counts however you were travelling — including following it,
+   * which is what makes drafting an overcharged rival suicidal.
+   */
+  anyHeading = false,
 ): Cut | null {
   if (index.chunks === 0) return null;
 
@@ -192,8 +200,10 @@ export function findCut(
       const sz = bb.z - a.z;
       const len = Math.sqrt(sx * sx + sy * sy + sz * sz);
       if (len < 1e-6) continue;
-      const agreement = (fx * sx + fy * sy + fz * sz) / len;
-      if (agreement >= CLIP.maxHeadingAgreement) continue;
+      if (!anyHeading) {
+        const agreement = (fx * sx + fy * sy + fz * sz) / len;
+        if (agreement >= CLIP.maxHeadingAgreement) continue;
+      }
 
       // The FIRST thing the clipper's path reaches is what it cuts. A pass
       // across a coiled trail can satisfy several segments at once, and

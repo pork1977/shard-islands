@@ -12,6 +12,7 @@ import NetDebug from "./NetDebug";
 import Scoreboard from "./Scoreboard";
 import DraftHud from "./DraftHud";
 import ClipHud from "./ClipHud";
+import BeaconHud from "./BeaconHud";
 import WorldScene from "./WorldScene";
 import PlayerGlider from "@/components/world/PlayerGlider";
 import RemoteGliders from "@/components/world/RemoteGliders";
@@ -96,6 +97,7 @@ export default function Experience() {
       <Scoreboard />
       <DraftHud />
       <ClipHud />
+      <BeaconHud />
       <NetDebug />
       <ControlsHint />
     </>

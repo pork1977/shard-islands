@@ -680,6 +680,81 @@ export function readClipStanding(): ClipStanding | null {
   };
 }
 
+/** What the Beacon is doing. */
+export interface BeaconView {
+  charge: number;
+  /** 0 charging, 1 open, 2 spent. */
+  phase: number;
+  phaseMsLeft: number;
+  /** Empty when nobody is overcharged. */
+  holderId: string;
+  holderSeat: number;
+  overchargeMsLeft: number;
+  /** Whether the player reading this is the one holding it. */
+  mine: boolean;
+}
+
+const beaconView: BeaconView = {
+  charge: 0,
+  phase: 0,
+  phaseMsLeft: 0,
+  holderId: "",
+  holderSeat: 0,
+  overchargeMsLeft: 0,
+  mine: false,
+};
+
+/**
+ * The Beacon's state, or a plausible nothing while offline.
+ *
+ * Returns a shared object — this is read every frame by the world and every
+ * hundred milliseconds by the HUD, and allocating for it would be silly.
+ */
+export function readBeacon(): BeaconView {
+  const b = connection.room?.state?.beacon as
+    | {
+        charge: number;
+        phase: number;
+        phaseMsLeft: number;
+        holderId: string;
+        holderSeat: number;
+        overchargeMsLeft: number;
+      }
+    | undefined;
+
+  if (!b) {
+    // Offline. The dome is still there and still turning; it simply never
+    // opens, which is better than it flickering between states.
+    beaconView.charge = 0;
+    beaconView.phase = 0;
+    beaconView.phaseMsLeft = 0;
+    beaconView.holderId = "";
+    beaconView.overchargeMsLeft = 0;
+    beaconView.mine = false;
+    return beaconView;
+  }
+
+  beaconView.charge = b.charge;
+  beaconView.phase = b.phase;
+  beaconView.phaseMsLeft = b.phaseMsLeft;
+  beaconView.holderId = b.holderId;
+  beaconView.holderSeat = b.holderSeat;
+  beaconView.overchargeMsLeft = b.overchargeMsLeft;
+  beaconView.mine = b.holderId !== "" && b.holderId === connection.selfId;
+  return beaconView;
+}
+
+/** Seats whose craft are currently overcharged, for drawing the live wake. */
+export function readOvercharged(into: Set<number>): Set<number> {
+  into.clear();
+  const players = connection.room?.state?.players;
+  if (!players) return into;
+  players.forEach((p: { seat: number; overcharged: boolean }) => {
+    if (p.overcharged) into.add(p.seat);
+  });
+  return into;
+}
+
 /** How many gliders are in the sky, including this one. */
 export function playerCount(): number {
   const room = connection.room;
