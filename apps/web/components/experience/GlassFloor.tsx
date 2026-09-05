@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { GlassFloorMaterial } from "@/lib/shaders/glassFloor";
 import { generateHandprintTexture } from "@/lib/textures/handprintTexture";
 import { generateRadialGlowTexture } from "@/lib/textures/radialGlowTexture";
+import { generateSprayTextTexture } from "@/lib/textures/sprayTexture";
 import { useGameStore } from "@/lib/store/useGameStore";
 import { prewarmWorld } from "@/lib/world/prewarm";
 import { beginJoin } from "@/lib/net/connection";
@@ -119,6 +120,45 @@ function HandprintHotspot() {
   );
 }
 
+/**
+ * One word, sprayed on the wrong side of the glass.
+ *
+ * Reverse psychology, because an instruction would break the spell: a page
+ * that says "press here" is a product, and a page that says DON'T is a dare.
+ * It sits low and off-centre, angled, well away from the handprint — the
+ * hand is still the invitation, and this is just something somebody wrote.
+ */
+function Graffiti() {
+  const texture = useMemo(() => generateSprayTextTexture("DON'T"), []);
+  const meshRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    if (!meshRef.current) return;
+    // barely alive, as if the light behind the glass moves past it
+    const t = state.clock.elapsedTime;
+    const material = meshRef.current.material as THREE.MeshBasicMaterial;
+    material.opacity = 0.26 + Math.sin(t * 0.7) * 0.035;
+  });
+
+  return (
+    <mesh
+      ref={meshRef}
+      position={[-1.15, -1.05, 0.008]}
+      rotation={[0, 0, -0.07]}
+      raycast={() => null}
+    >
+      <planeGeometry args={[2.5, 1.05]} />
+      <meshBasicMaterial
+        map={texture}
+        transparent
+        opacity={0.26}
+        depthWrite={false}
+        toneMapped={false}
+      />
+    </mesh>
+  );
+}
+
 export default function GlassFloor({ normalMap }: { normalMap: THREE.Texture }) {
   // the world below is built during this screen, not during the break
   useEffect(() => {
@@ -128,6 +168,7 @@ export default function GlassFloor({ normalMap }: { normalMap: THREE.Texture }) 
   return (
     <group>
       <GlassPane normalMap={normalMap} />
+      <Graffiti />
       <HandprintHotspot />
     </group>
   );
