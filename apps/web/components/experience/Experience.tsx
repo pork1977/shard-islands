@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import GlassFloor from "./GlassFloor";
@@ -52,7 +52,27 @@ function Stage() {
   );
 }
 
+/**
+ * The cursor is only wanted while there is something to click.
+ *
+ * On the glass it is the whole invitation — a hand waiting to be pressed.
+ * Once the pane is broken there is nothing left to point at, and an arrow
+ * sitting in the sky is the one thing on screen that gives away that this
+ * is a web page. Dragging still orbits the camera; it just does it blind,
+ * which is how every flight game has ever done it.
+ */
+function useHiddenCursor(phase: string) {
+  useEffect(() => {
+    const hide = phase !== "landing";
+    document.documentElement.classList.toggle("in-flight", hide);
+    return () => document.documentElement.classList.remove("in-flight");
+  }, [phase]);
+}
+
 export default function Experience() {
+  const phase = useGameStore((s) => s.phase);
+  useHiddenCursor(phase);
+
   return (
     <>
       {/*

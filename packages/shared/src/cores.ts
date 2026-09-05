@@ -38,8 +38,18 @@ export const CORE_COUNT = 240;
 /** Trail granted by one core. Worth roughly four motes caught on the way down. */
 export const CORE_TRAIL_VALUE = 12;
 
-/** Generous: this is a craft moving at fifty metres a second. */
-export const CORE_PICKUP_RADIUS = 14;
+/**
+ * How close counts as collected.
+ *
+ * Deliberately far larger than the core looks. The visible core is three
+ * and a half metres across a sky that is two point eight kilometres wide,
+ * and asking someone to fly a point through it at fifty metres a second is
+ * asking for a game of misses. The pickup is a soft bubble around the
+ * pretty thing, not the pretty thing itself — and because collection is
+ * swept along the whole path flown each tick rather than tested at the
+ * endpoint, a boosted dive cannot skip straight over one either.
+ */
+export const CORE_PICKUP_RADIUS = 22;
 
 /** How long a collected core takes to come back. */
 export const CORE_RESPAWN_MS = 22000;

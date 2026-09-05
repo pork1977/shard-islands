@@ -224,6 +224,12 @@ export class ShardIslandsRoom extends Room<RoomState> {
       const rt = this.runtime.get(id);
       if (!rt || !rt.simulating) return;
 
+      // Where this tick started. Collection is tested against the whole
+      // path flown, not just where the craft ended up.
+      const fromX = rt.sim.x;
+      const fromY = rt.sim.y;
+      const fromZ = rt.sim.z;
+
       let applied = 0;
       while (rt.pending.length > 0 && applied < MAX_SAMPLES_PER_TICK) {
         const sample = rt.pending.shift()!;
@@ -254,7 +260,7 @@ export class ShardIslandsRoom extends Room<RoomState> {
         );
       }
 
-      this.collectCores(player, rt);
+      this.collectCores(player, rt, fromX, fromY, fromZ);
       this.publish(player, rt);
       this.appendTrail(player);
     });
@@ -374,21 +380,54 @@ export class ShardIslandsRoom extends Room<RoomState> {
    * for arrives with tail-clip, where the same broad phase gets reused
    * against trail segments and actually earns its complexity.
    */
-  private collectCores(player: PlayerState, rt: Runtime) {
+  private collectCores(
+    player: PlayerState,
+    rt: Runtime,
+    fromX: number,
+    fromY: number,
+    fromZ: number,
+  ) {
     const sites = coreSites();
     const radiusSq = CORE_PICKUP_RADIUS * CORE_PICKUP_RADIUS;
+
+    // The path flown since the last check, and a box around it wide enough
+    // to hold the pickup bubble at either end.
+    const px = rt.sim.x - fromX;
+    const py = rt.sim.y - fromY;
+    const pz = rt.sim.z - fromZ;
+    const pathSq = px * px + py * py + pz * pz;
+
+    const loX = Math.min(fromX, rt.sim.x) - CORE_PICKUP_RADIUS;
+    const hiX = Math.max(fromX, rt.sim.x) + CORE_PICKUP_RADIUS;
+    const loY = Math.min(fromY, rt.sim.y) - CORE_PICKUP_RADIUS;
+    const hiY = Math.max(fromY, rt.sim.y) + CORE_PICKUP_RADIUS;
+    const loZ = Math.min(fromZ, rt.sim.z) - CORE_PICKUP_RADIUS;
+    const hiZ = Math.max(fromZ, rt.sim.z) + CORE_PICKUP_RADIUS;
 
     for (let i = 0; i < sites.length; i++) {
       if (this.state.coresTaken[i]) continue;
 
       // Cheap axis rejections first: nearly every core is nowhere near.
       const site = sites[i];
-      const dx = site.x - rt.sim.x;
-      if (dx > CORE_PICKUP_RADIUS || dx < -CORE_PICKUP_RADIUS) continue;
-      const dy = site.y - rt.sim.y;
-      if (dy > CORE_PICKUP_RADIUS || dy < -CORE_PICKUP_RADIUS) continue;
-      const dz = site.z - rt.sim.z;
-      if (dz > CORE_PICKUP_RADIUS || dz < -CORE_PICKUP_RADIUS) continue;
+      if (site.x < loX || site.x > hiX) continue;
+      if (site.y < loY || site.y > hiY) continue;
+      if (site.z < loZ || site.z > hiZ) continue;
+
+      // Closest approach along this tick's path rather than the distance at
+      // the end of it. A craft in a boosted dive covers ten metres between
+      // ticks, and testing only the endpoint let it pass clean through a
+      // core it was aimed straight at — the single most infuriating way for
+      // a pickup to fail, because the player did everything right.
+      let t = 0;
+      if (pathSq > 1e-9) {
+        t =
+          ((site.x - fromX) * px + (site.y - fromY) * py + (site.z - fromZ) * pz) /
+          pathSq;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+      }
+      const dx = site.x - (fromX + px * t);
+      const dy = site.y - (fromY + py * t);
+      const dz = site.z - (fromZ + pz * t);
       if (dx * dx + dy * dy + dz * dz > radiusSq) continue;
 
       this.state.coresTaken[i] = true;

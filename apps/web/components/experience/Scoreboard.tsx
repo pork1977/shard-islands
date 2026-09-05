@@ -49,23 +49,26 @@ export default function Scoreboard() {
         position: "fixed",
         right: 18,
         top: 54,
-        minWidth: 132,
+        minWidth: 168,
         pointerEvents: "none",
         userSelect: "none",
         fontFamily:
           "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
-        fontSize: 12,
+        // Sized up: this is the only place the score exists, and it was
+        // being read out of the corner of the eye at twelve pixels while
+        // the player was busy flying.
+        fontSize: 15,
         letterSpacing: 1,
         textShadow: "0 1px 6px rgba(0,0,0,0.75)",
       }}
     >
       <div
         style={{
-          fontSize: 9,
-          letterSpacing: 2.6,
+          fontSize: 10,
+          letterSpacing: 2.8,
           textTransform: "uppercase",
-          color: "rgba(255,255,255,0.35)",
-          marginBottom: 4,
+          color: "rgba(255,255,255,0.4)",
+          marginBottom: 5,
           textAlign: "right",
         }}
       >
@@ -79,8 +82,8 @@ export default function Scoreboard() {
             display: "flex",
             alignItems: "center",
             justifyContent: "flex-end",
-            gap: 7,
-            lineHeight: 1.8,
+            gap: 9,
+            lineHeight: 1.75,
             color: row.self ? "#ffffff" : "rgba(255,255,255,0.62)",
             fontWeight: row.self ? 700 : 400,
           }}
@@ -95,7 +98,7 @@ export default function Scoreboard() {
           >
             P{row.seat + 1}
           </span>
-          <span style={{ fontVariantNumeric: "tabular-nums", minWidth: 34, textAlign: "right" }}>
+          <span style={{ fontVariantNumeric: "tabular-nums", minWidth: 44, textAlign: "right" }}>
             {row.trailLength}
           </span>
         </div>
