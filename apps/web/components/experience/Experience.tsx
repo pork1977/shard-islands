@@ -15,6 +15,7 @@ import PlayerGlider from "@/components/world/PlayerGlider";
 import RemoteGliders from "@/components/world/RemoteGliders";
 import PlayerLabels from "@/components/world/PlayerLabels";
 import RemoteTrails from "@/components/world/RemoteTrails";
+import EnergyCores from "@/components/world/EnergyCores";
 import ControlsHint from "./ControlsHint";
 import SpeedLines from "./SpeedLines";
 import { generateFrostedGlassNormalTexture } from "@/lib/textures/frostedGlassNormal";
@@ -43,6 +44,8 @@ function Stage() {
       <PlayerLabels />
       {/* and their trails, which are what the score actually is */}
       <RemoteTrails />
+      {/* the reason to go anywhere */}
+      <EnergyCores />
       <SpeedLines />
     </>
   );

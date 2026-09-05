@@ -31,6 +31,9 @@ export class PlayerState extends Schema {
   /** How much trail this player has earned — the score, in effect. */
   @type("float32") trailLength = 26;
 
+  /** Cores collected this session, purely so the player can see the count. */
+  @type("uint16") cores = 0;
+
   /** Hue index into the client's palette, so players are told apart. */
   @type("uint8") colour = 0;
 
@@ -71,6 +74,14 @@ export class PlayerState extends Schema {
 
 export class RoomState extends Schema {
   @type({ map: PlayerState }) players = new MapSchema<PlayerState>();
+
+  /**
+   * One flag per Energy Core: true while it is collected and waiting to come
+   * back. Positions are never sent — both sides generate the identical
+   * layout from the shared seed, so the wire only carries what changed,
+   * which is a single boolean per pickup.
+   */
+  @type(["boolean"]) coresTaken = new ArraySchema<boolean>();
 
   /** Server tick count, useful for debugging desync. */
   @type("uint32") tick = 0;

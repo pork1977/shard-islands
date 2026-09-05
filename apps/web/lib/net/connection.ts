@@ -502,6 +502,29 @@ export function readTrailForSeat(seat: number, nowMs: number): number[] {
   return trailsBySeat.get(seat) ?? EMPTY_TRAIL;
 }
 
+/**
+ * Which Energy Cores are currently collected.
+ *
+ * Only the flags travel — every client builds the same core layout from the
+ * shared seed, so the room never sends a position. Written into a caller's
+ * array to keep this allocation-free on the frame path.
+ */
+export function readCoresTaken(into: Uint8Array): Uint8Array {
+  const room = connection.room;
+  const taken = room?.state?.coresTaken as ArrayLike<boolean> | undefined;
+
+  if (!taken) {
+    // Offline, or not joined yet. The world still shows its cores; there is
+    // simply nothing collecting them.
+    into.fill(0);
+    return into;
+  }
+
+  const count = Math.min(into.length, taken.length);
+  for (let i = 0; i < count; i++) into[i] = taken[i] ? 1 : 0;
+  return into;
+}
+
 /** How many gliders are in the sky, including this one. */
 export function playerCount(): number {
   const room = connection.room;

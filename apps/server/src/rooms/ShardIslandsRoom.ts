@@ -3,6 +3,10 @@ import {
   ROOM,
   SERVER_TICK_RATE_HZ,
   TRAIL,
+  CORE_PICKUP_RADIUS,
+  CORE_RESPAWN_MS,
+  CORE_TRAIL_VALUE,
+  coreSites,
   createFlightSim,
   stepFlight,
   type FlightSim,
@@ -52,10 +56,6 @@ interface Runtime {
   simulating: boolean;
   /** When input last arrived, so a real silence can be told from jitter. */
   lastInputAt: number;
-  /** Where the last point of trail was earned. */
-  lastScoredX: number;
-  lastScoredY: number;
-  lastScoredZ: number;
 }
 
 /**
@@ -78,8 +78,6 @@ const MAX_SAMPLES_PER_TICK = 12;
  */
 const SILENCE_BEFORE_COAST_MS = 250;
 
-/** How far a player flies to earn one more point of trail. */
-const METRES_PER_TRAIL_POINT = 35;
 /** Ribbon length has to stay bounded, for the wire and for the renderer. */
 const MAX_TRAIL_LENGTH = 350;
 
@@ -102,8 +100,17 @@ export class ShardIslandsRoom extends Room<RoomState> {
 
   private runtime = new Map<string, Runtime>();
 
+  /** When each collected core comes back, by index. 0 means it is out there. */
+  private coreReturnsAt: number[] = [];
+
   onCreate() {
     this.setState(new RoomState());
+
+    // One flag per core, all present to begin with. Positions are never
+    // sent: both sides build the identical layout from the shared seed.
+    const sites = coreSites();
+    this.coreReturnsAt = new Array(sites.length).fill(0);
+    for (let i = 0; i < sites.length; i++) this.state.coresTaken.push(false);
 
     this.onMessage("descent", (client, data: DescentMessage) => {
       const player = this.state.players.get(client.sessionId);
@@ -131,9 +138,6 @@ export class ShardIslandsRoom extends Room<RoomState> {
       rt.simulating = true;
       rt.pending.length = 0;
       rt.lastInputAt = Date.now();
-      rt.lastScoredX = rt.sim.x;
-      rt.lastScoredY = rt.sim.y;
-      rt.lastScoredZ = rt.sim.z;
 
       player.simulated = true;
       player.trailLength = data.trailLength;
@@ -192,9 +196,6 @@ export class ShardIslandsRoom extends Room<RoomState> {
       lastSeq: 0,
       simulating: false,
       lastInputAt: Date.now(),
-      lastScoredX: 0,
-      lastScoredY: 0,
-      lastScoredZ: 0,
     });
 
     console.log(`[room] join ${client.sessionId} (${this.state.players.size} in room)`);
@@ -244,10 +245,12 @@ export class ShardIslandsRoom extends Room<RoomState> {
         );
       }
 
-      this.growTrail(player, rt);
+      this.collectCores(player, rt);
       this.publish(player, rt);
       this.appendTrail(player);
     });
+
+    this.respawnCores(now);
   }
 
   private publish(player: PlayerState, rt: Runtime) {
@@ -265,28 +268,55 @@ export class ShardIslandsRoom extends Room<RoomState> {
   }
 
   /**
-   * The score, such as it is: trail earned by distance flown.
+   * Cores collected this tick.
    *
-   * A leaderboard whose numbers never move is a list, not a contest, and
-   * until Energy Cores land there is nothing else in the world to earn.
-   * This is deliberately slow — it is the floor under the score, not the
-   * game. Cores will be the real source, and this stays as the reason a
-   * player who is simply flying well still climbs.
+   * Decided here and nowhere else. Two players reaching the same core within
+   * a few milliseconds is exactly what a client-side pickup gets wrong: both
+   * would take it, both would score, and each would watch the other fly
+   * through a core that was not there. The room resolves it by being the only
+   * thing that can — the first player the loop reaches takes it, and the flag
+   * is already set by the time the second is tested.
    *
-   * Server-side because the score decides who wears the crown, and a number
-   * clients calculate for themselves is a number clients can lie about.
+   * A flat scan over every core, which at 240 cores and two dozen players is
+   * a few thousand cheap comparisons a tick. The spatial hash the plan calls
+   * for arrives with tail-clip, where the same broad phase gets reused
+   * against trail segments and actually earns its complexity.
    */
-  private growTrail(player: PlayerState, rt: Runtime) {
-    const dx = rt.sim.x - rt.lastScoredX;
-    const dy = rt.sim.y - rt.lastScoredY;
-    const dz = rt.sim.z - rt.lastScoredZ;
-    const moved = Math.hypot(dx, dy, dz);
-    if (moved < METRES_PER_TRAIL_POINT) return;
+  private collectCores(player: PlayerState, rt: Runtime) {
+    const sites = coreSites();
+    const radiusSq = CORE_PICKUP_RADIUS * CORE_PICKUP_RADIUS;
 
-    rt.lastScoredX = rt.sim.x;
-    rt.lastScoredY = rt.sim.y;
-    rt.lastScoredZ = rt.sim.z;
-    player.trailLength = Math.min(MAX_TRAIL_LENGTH, player.trailLength + 1);
+    for (let i = 0; i < sites.length; i++) {
+      if (this.state.coresTaken[i]) continue;
+
+      // Cheap axis rejections first: nearly every core is nowhere near.
+      const site = sites[i];
+      const dx = site.x - rt.sim.x;
+      if (dx > CORE_PICKUP_RADIUS || dx < -CORE_PICKUP_RADIUS) continue;
+      const dy = site.y - rt.sim.y;
+      if (dy > CORE_PICKUP_RADIUS || dy < -CORE_PICKUP_RADIUS) continue;
+      const dz = site.z - rt.sim.z;
+      if (dz > CORE_PICKUP_RADIUS || dz < -CORE_PICKUP_RADIUS) continue;
+      if (dx * dx + dy * dy + dz * dz > radiusSq) continue;
+
+      this.state.coresTaken[i] = true;
+      this.coreReturnsAt[i] = Date.now() + CORE_RESPAWN_MS;
+      player.trailLength = Math.min(
+        MAX_TRAIL_LENGTH,
+        player.trailLength + CORE_TRAIL_VALUE,
+      );
+      player.cores += 1;
+    }
+  }
+
+  /** Cores come back, so an emptied sky refills for whoever arrives next. */
+  private respawnCores(now: number) {
+    for (let i = 0; i < this.coreReturnsAt.length; i++) {
+      const due = this.coreReturnsAt[i];
+      if (due === 0 || now < due) continue;
+      this.coreReturnsAt[i] = 0;
+      this.state.coresTaken[i] = false;
+    }
   }
 
   /**
