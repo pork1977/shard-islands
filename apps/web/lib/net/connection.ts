@@ -816,6 +816,41 @@ export function readBeacon(): BeaconView {
   return beaconView;
 }
 
+/**
+ * Seats with somebody in them who is actually flying, and how far away.
+ *
+ * Two jobs, because both answers come from one walk of the same map and
+ * both are wanted by the same caller at the same moment.
+ *
+ * Which seats exist decides which ribbons are mounted at all: an empty
+ * seat's ribbon still costs a draw call, and in a two-player room
+ * twenty-two of the twenty-four are empty.
+ *
+ * How far away decides how much of each ribbon is drawn. A trail is an
+ * emissive band feeding the bloom pass, which is the expensive kind of
+ * pixel on a phone, and a ribbon three hundred metres off contributes a
+ * smear nobody can read.
+ */
+export function readSeatRanges(into: Map<number, number>): Map<number, number> {
+  into.clear();
+  const players = connection.room?.state?.players;
+  if (!players) return into;
+
+  const [mx, my, mz] = playerState.position;
+
+  players.forEach(
+    (
+      p: { seat: number; simulated: boolean; away: boolean; x: number; y: number; z: number },
+      id: string,
+    ) => {
+      if (id === connection.selfId) return; // the local ribbon is drawn elsewhere
+      if (!p.simulated || p.away) return;
+      into.set(p.seat, Math.hypot(p.x - mx, p.y - my, p.z - mz));
+    },
+  );
+  return into;
+}
+
 /** Seats whose craft are currently overcharged, for drawing the live wake. */
 export function readOvercharged(into: Set<number>): Set<number> {
   into.clear();

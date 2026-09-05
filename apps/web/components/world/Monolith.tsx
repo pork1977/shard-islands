@@ -37,10 +37,18 @@ export default function Monolith() {
   const coreRef = useRef<THREE.Group>(null);
   const coreShellRef = useRef<THREE.Mesh>(null);
   const coreHaloRef = useRef<THREE.Mesh>(null);
-  const spikesRef = useRef<THREE.Group>(null);
+  const spikesRef = useRef<THREE.InstancedMesh>(null);
 
-  const spikes = useMemo(() => {
-    const out: { rot: [number, number, number]; len: number }[] = [];
+  /**
+   * The spikes, as one instanced mesh.
+   *
+   * They were twenty-six separate meshes, and measuring the frame found the
+   * Beacon costing forty-one draw calls — more than half of everything else
+   * in view put together, for one object. They share a geometry, a material
+   * and an animation; the only thing that differs is where each one points
+   * and how long it is, which is exactly what an instance matrix is for.
+   */
+  const spikeMesh = useMemo(() => {
     const count = 26;
     // Deterministic, like everything else about this object.
     let seed = 1337;
@@ -48,16 +56,41 @@ export default function Monolith() {
       seed = (seed * 1664525 + 1013904223) % 4294967296;
       return seed / 4294967296;
     };
+
+    const geometry = new THREE.ConeGeometry(3.6, 1, 5);
+    geometry.translate(0, 0.5, 0); // base at origin so it grows outward
+    geometry.rotateX(Math.PI / 2);
+
+    const material = new THREE.MeshLambertMaterial({
+      color: "#2b1c4d",
+      emissive: "#7a2bff",
+      emissiveIntensity: 0.9,
+    });
+
+    const mesh = new THREE.InstancedMesh(geometry, material, count);
+    // It is one object at a known place; the culler cannot beat that.
+    mesh.frustumCulled = false;
+
+    const matrix = new THREE.Matrix4();
+    const quaternion = new THREE.Quaternion();
+    const euler = new THREE.Euler();
+    const origin = new THREE.Vector3();
+    const scale = new THREE.Vector3();
+
     for (let i = 0; i < count; i++) {
       // spread over the upper hemisphere, avoiding a neat ring
       const theta = Math.acos(1 - rand() * 0.95);
       const phi = (i / count) * Math.PI * 2 + rand() * 0.4;
-      out.push({
-        rot: [theta * Math.cos(phi), theta * Math.sin(phi), phi],
-        len: 26 + rand() * 40,
-      });
+      const len = 26 + rand() * 40;
+
+      euler.set(theta * Math.cos(phi), theta * Math.sin(phi), 0);
+      quaternion.setFromEuler(euler);
+      scale.set(1, 1, len);
+      mesh.setMatrixAt(i, matrix.compose(origin, quaternion, scale));
     }
-    return out;
+    mesh.instanceMatrix.needsUpdate = true;
+
+    return mesh;
   }, []);
 
   const domeGeo = useMemo(() => {
@@ -76,13 +109,6 @@ export default function Monolith() {
     faceted.computeVertexNormals();
     g.dispose();
     return faceted;
-  }, []);
-
-  const spikeGeo = useMemo(() => {
-    const g = new THREE.ConeGeometry(3.6, 1, 5);
-    g.translate(0, 0.5, 0); // base at origin so it grows outward
-    g.rotateX(Math.PI / 2);
-    return g;
   }, []);
 
   const colours = useMemo(
@@ -145,12 +171,10 @@ export default function Monolith() {
     }
 
     if (spikesRef.current) {
-      const glow = 0.9 + heat * 1.8 + (open ? beat * 1.5 : 0);
-      spikesRef.current.children.forEach((child) => {
-        const m = (child as THREE.Mesh).material as THREE.MeshLambertMaterial;
-        m.emissive.copy(colours.spikeIdle).lerp(colours.spikeOpen, heat);
-        m.emissiveIntensity = glow;
-      });
+      // One material now, so one write rather than twenty-six.
+      const m = spikesRef.current.material as THREE.MeshLambertMaterial;
+      m.emissive.copy(colours.spikeIdle).lerp(colours.spikeOpen, heat);
+      m.emissiveIntensity = 0.9 + heat * 1.8 + (open ? beat * 1.5 : 0);
     }
 
     if (beamsRef.current) {
@@ -196,22 +220,7 @@ export default function Monolith() {
         <meshLambertMaterial color="#171a2e" emissive="#2a1150" emissiveIntensity={0.6} />
       </mesh>
 
-      <group ref={spikesRef}>
-        {spikes.map((s, i) => (
-          <mesh
-            key={i}
-            geometry={spikeGeo}
-            rotation={[s.rot[0], s.rot[1], 0]}
-            scale={[1, 1, s.len]}
-          >
-            <meshLambertMaterial
-              color="#2b1c4d"
-              emissive="#7a2bff"
-              emissiveIntensity={0.9}
-            />
-          </mesh>
-        ))}
-      </group>
+      <primitive object={spikeMesh} ref={spikesRef} />
 
       {/* halo lying on the ground around the base */}
       <mesh ref={ringRef} position={[0, 0, 1]}>

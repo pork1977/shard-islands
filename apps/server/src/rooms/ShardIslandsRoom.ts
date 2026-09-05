@@ -163,6 +163,22 @@ export class ShardIslandsRoom extends Room<RoomState> {
   private shardTiming = new Map<number, ShardTiming>();
   private nextShardId = 1;
 
+  /**
+   * When the previous tick ran, so this one can be told how long it has
+   * actually been.
+   *
+   * The room asks for fifty milliseconds and does not necessarily get it.
+   * Windows rounds a timer up to the next multiple of about fifteen and a
+   * half, so a 50ms interval fires every 62.5ms and the room runs at 16Hz
+   * rather than 20 — on the development machine, every time, with an empty
+   * room. Anything that multiplied by the NOMINAL rate was therefore
+   * quietly twenty percent out: an unattended craft coasted slowly, and the
+   * Beacon took two minutes to charge instead of one and three quarters.
+   *
+   * Measuring is both simpler and more honest than trying to fix the timer.
+   */
+  private lastTickAt = 0;
+
   /** When the Beacon's current phase ends. */
   private beaconPhaseEndsAt = 0;
   /** When the current overcharge runs out. */
@@ -298,6 +314,12 @@ export class ShardIslandsRoom extends Room<RoomState> {
     this.state.tick++;
     const now = Date.now();
 
+    // How long this tick really represents. Clamped, because a process that
+    // was descheduled for a second must not advance the world by a second.
+    const sinceLast = this.lastTickAt === 0 ? 0 : (now - this.lastTickAt) / 1000;
+    this.lastTickAt = now;
+    const tickSeconds = Math.min(Math.max(sinceLast, 1 / 240), 1 / 5);
+
     // Resolved for the whole room BEFORE anybody is stepped, so drafting is
     // decided against one consistent picture of where everyone was. Doing it
     // inside the per-player loop would let the players simulated first be
@@ -348,7 +370,10 @@ export class ShardIslandsRoom extends Room<RoomState> {
             hover: rt.hovering,
             roll: 0,
           },
-          1 / SERVER_TICK_RATE_HZ,
+          // Real elapsed time, not the nominal tick. A coasting craft
+          // flying at four fifths speed because the timer is coarse is a
+          // bug that only appears on one operating system.
+          tickSeconds,
         );
       }
 
@@ -370,7 +395,7 @@ export class ShardIslandsRoom extends Room<RoomState> {
     this.respawnCores(now);
     this.expireShards(now);
     this.reapAbandoned(now);
-    this.stepBeacon(now);
+    this.stepBeacon(now, tickSeconds);
   }
 
   /**
@@ -387,7 +412,7 @@ export class ShardIslandsRoom extends Room<RoomState> {
    * losing. The consolation for losing is that the sky now contains the
    * most valuable target in the game.
    */
-  private stepBeacon(now: number) {
+  private stepBeacon(now: number, tickSeconds: number) {
     const beacon = this.state.beacon;
 
     // The overcharge runs on its own clock: it outlives the opening, and
@@ -447,7 +472,7 @@ export class ShardIslandsRoom extends Room<RoomState> {
     );
     beacon.charge = Math.min(
       1,
-      beacon.charge + rate / (BEACON.chargeSecondsAlone * SERVER_TICK_RATE_HZ),
+      beacon.charge + (rate * tickSeconds) / BEACON.chargeSecondsAlone,
     );
 
     if (beacon.charge >= 1) {

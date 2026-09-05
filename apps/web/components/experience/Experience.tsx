@@ -28,6 +28,7 @@ import ControlsHint from "./ControlsHint";
 import SpeedLines from "./SpeedLines";
 import { generateFrostedGlassNormalTexture } from "@/lib/textures/frostedGlassNormal";
 import { useGameStore } from "@/lib/store/useGameStore";
+import { deviceTier, maxPixelRatio } from "@/lib/world/deviceTier";
 
 function Stage() {
   // one bake, shared by the intact pane and the shards, so the broken pane
@@ -83,7 +84,11 @@ export default function Experience() {
       */}
       <Canvas
         camera={{ position: [0, 0, 5], fov: 50, near: 1, far: 5000 }}
-        dpr={[1, 2]}
+        // Capped at 1 on a phone. A full-screen render with a bloom pass
+        // over it costs pixels, and a modern handset asks for three times
+        // as many in each direction as it can usefully show at arm's
+        // length — nine times the work for nothing.
+        dpr={[1, maxPixelRatio()]}
       >
         <color attach="background" args={["#04080e"]} />
         <Stage />
@@ -93,6 +98,11 @@ export default function Experience() {
             luminanceThreshold={0.72}
             luminanceSmoothing={0.25}
             mipmapBlur
+            // Half-resolution bloom on a phone. It is a blur: run at half
+            // and then upsampled, the result is very nearly the same image
+            // for a quarter of the pixels, and this is the pass that makes
+            // iOS throttle when the sky fills with emissive trails.
+            resolutionScale={deviceTier() === "low" ? 0.5 : 1}
           />
         </EffectComposer>
       </Canvas>

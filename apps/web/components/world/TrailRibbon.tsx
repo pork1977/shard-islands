@@ -45,10 +45,19 @@ export default function TrailRibbon({
   opacity = 1,
   core,
   tail,
+  maxPoints,
 }: {
   points: () => number[];
   width: number;
   opacity?: number;
+  /**
+   * Draw at most this many points, taken from the HEAD of the trail.
+   *
+   * The head, not the tail, because the piece worth seeing is the piece
+   * attached to the craft — that is where the player is, and where the
+   * hazard is. Used to cut distant players' ribbons to a stub.
+   */
+  maxPoints?: number;
   /** Per-player tint. Left off, the material's own palette is used. */
   core?: THREE.ColorRepresentation;
   tail?: THREE.ColorRepresentation;
@@ -88,19 +97,23 @@ export default function TrailRibbon({
     }
 
     const pts = points();
-    const count = Math.min(Math.floor(pts.length / 3), MAX_POINTS);
+    const total = Math.min(Math.floor(pts.length / 3), MAX_POINTS);
+    const count = maxPoints === undefined ? total : Math.min(total, maxPoints);
+    // Everything before this is simply not built. Skipping from the start
+    // keeps the newest points, which are the ones next to the craft.
+    const from = total - count;
     if (count < 2) {
       geometry.setDrawRange(0, 0);
       return;
     }
 
     for (let i = 0; i < count; i++) {
-      const o = i * 3;
+      const o = (from + i) * 3;
       here.set(pts[o], pts[o + 1], pts[o + 2]);
 
       // direction along the trail, from the neighbouring points
-      const prev = Math.max(0, i - 1) * 3;
-      const next = Math.min(count - 1, i + 1) * 3;
+      const prev = (from + Math.max(0, i - 1)) * 3;
+      const next = (from + Math.min(count - 1, i + 1)) * 3;
       dir
         .set(pts[next] - pts[prev], pts[next + 1] - pts[prev + 1], pts[next + 2] - pts[prev + 2])
         .normalize();

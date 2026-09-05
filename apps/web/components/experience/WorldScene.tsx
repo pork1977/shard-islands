@@ -185,57 +185,111 @@ function makeCloudTexture(size = 256): THREE.CanvasTexture {
   return new THREE.CanvasTexture(canvas);
 }
 
-interface CloudSpec {
-  position: [number, number, number];
-  scale: number;
-  opacity: number;
-  rotation: number;
-}
+const CLOUD_COUNT = 260;
 
+/**
+ * The cloud decks, as ONE instanced mesh.
+ *
+ * They were two hundred and sixty separate meshes, each with its own
+ * geometry and its own material, and measuring the frame found them costing
+ * two hundred and two draw calls and four and a third milliseconds — for
+ * four hundred triangles. Nothing else came close: the terrain draws a
+ * hundred and eighty thousand triangles in a single call for free, and half
+ * a million triangles of instanced trees and grass cost nothing measurable
+ * at all. The clouds were three quarters of the frame, and it was entirely
+ * the number of draws.
+ *
+ * One geometry, one material, one call. Size rides in each instance matrix;
+ * opacity rides in an instanced attribute, which is the only part needing a
+ * shader touch, because instance colour is RGB and these vary in alpha.
+ *
+ * Seeded rather than random, matching the terrain and the cores. Clouds are
+ * the one place it genuinely would not matter if two players saw different
+ * ones — but "everything in this world is generated the same way" is worth
+ * more than the exception, and Math.random in a render is a lint error here
+ * for good reasons of its own.
+ */
 function Clouds({ texture }: { texture: THREE.Texture }) {
-  const specs = useMemo<CloudSpec[]>(() => {
-    const out: CloudSpec[] = [];
-    // Layered decks through the whole descent, so the long fall keeps
-    // passing something. Density thins near the ground so the landscape is
-    // clear once flight begins.
-    for (let i = 0; i < 260; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const radius = Math.pow(Math.random(), 0.6) * 1100;
-      const t = Math.random();
-      out.push({
-        position: [
-          Math.cos(angle) * radius,
-          Math.sin(angle) * radius,
-          // stops well above the highest ground — decks that reach the
-          // terrain smear white fog across the hills
-          -25 - t * 680,
-        ],
-        scale: 90 + Math.random() * 230,
-        opacity: 0.2 + Math.random() * 0.45,
-        rotation: Math.random() * Math.PI,
-      });
-    }
-    return out;
-  }, []);
+  const mesh = useMemo(() => {
+    let seed = 4242;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) % 4294967296;
+      return seed / 4294967296;
+    };
 
-  return (
-    <group>
-      {specs.map((c, i) => (
-        <mesh key={i} position={c.position} rotation={[0, 0, c.rotation]}>
-          <planeGeometry args={[c.scale, c.scale]} />
-          <meshBasicMaterial
-            map={texture}
-            transparent
-            opacity={c.opacity}
-            // dusk-lit cloud, catching the low sun from underneath
-            color="#c99ab0"
-            depthWrite={false}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
-      ))}
-    </group>
-  );
+    const geometry = new THREE.PlaneGeometry(1, 1);
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      // dusk-lit cloud, catching the low sun from underneath
+      color: "#c99ab0",
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+
+    material.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          "#include <common>",
+          `#include <common>
+           attribute float aAlpha;
+           varying float vCloudAlpha;`,
+        )
+        .replace(
+          "#include <begin_vertex>",
+          `#include <begin_vertex>
+           vCloudAlpha = aAlpha;`,
+        );
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          "#include <common>",
+          `#include <common>
+           varying float vCloudAlpha;`,
+        )
+        .replace(
+          "#include <dithering_fragment>",
+          `#include <dithering_fragment>
+           gl_FragColor.a *= vCloudAlpha;`,
+        );
+    };
+
+    const instanced = new THREE.InstancedMesh(geometry, material, CLOUD_COUNT);
+    instanced.frustumCulled = false;
+
+    const alphas = new Float32Array(CLOUD_COUNT);
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    const quaternion = new THREE.Quaternion();
+    const scale = new THREE.Vector3();
+    const up = new THREE.Vector3(0, 0, 1);
+
+    for (let i = 0; i < CLOUD_COUNT; i++) {
+      const angle = rand() * Math.PI * 2;
+      const radius = Math.pow(rand(), 0.6) * 1100;
+      const t = rand();
+      const size = 90 + rand() * 230;
+
+      position.set(
+        Math.cos(angle) * radius,
+        Math.sin(angle) * radius,
+        // Stops well above the highest ground — decks that reach the terrain
+        // smear white fog across the hills.
+        -25 - t * 680,
+      );
+      quaternion.setFromAxisAngle(up, rand() * Math.PI);
+      scale.set(size, size, 1);
+      instanced.setMatrixAt(i, matrix.compose(position, quaternion, scale));
+
+      alphas[i] = 0.2 + rand() * 0.45;
+    }
+
+    instanced.instanceMatrix.needsUpdate = true;
+    geometry.setAttribute("aAlpha", new THREE.InstancedBufferAttribute(alphas, 1));
+
+    return instanced;
+  }, [texture]);
+
+  return <primitive object={mesh} />;
 }
 
 export default function WorldScene() {
