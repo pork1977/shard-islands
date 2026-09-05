@@ -452,9 +452,60 @@ export function readRoster(into: RosterEntry[]): RosterEntry[] {
   return into;
 }
 
+/**
+ * Every remote player's trail, flattened into xyz triples and keyed by seat.
+ *
+ * Rebuilt at most once a frame and shared, because each ribbon asks for its
+ * own points inside its own frame callback: without the cache, twenty-four
+ * ribbons would each walk the whole player map to find one of them.
+ *
+ * Seat rather than session id, so a ribbon keeps rendering the same player
+ * from frame to frame. Keying on position in a list means a ribbon jumps to
+ * somebody else's trail the moment anyone leaves.
+ */
+const trailsBySeat = new Map<number, number[]>();
+let trailsBuiltAt = -1;
+
+function buildTrails(nowMs: number) {
+  if (nowMs - trailsBuiltAt < 8) return;
+  trailsBuiltAt = nowMs;
+
+  for (const buffer of trailsBySeat.values()) buffer.length = 0;
+
+  const room = connection.room;
+  if (!room?.state?.players) return;
+
+  room.state.players.forEach(
+    (
+      player: { seat: number; trail?: { x: number; y: number; z: number }[] },
+      id: string,
+    ) => {
+      if (id === connection.selfId) return;
+      const trail = player.trail;
+      if (!trail || trail.length < 2) return;
+
+      let buffer = trailsBySeat.get(player.seat);
+      if (!buffer) {
+        buffer = [];
+        trailsBySeat.set(player.seat, buffer);
+      }
+      for (const point of trail) buffer.push(point.x, point.y, point.z);
+    },
+  );
+}
+
+const EMPTY_TRAIL: number[] = [];
+
+/** One player's trail, as flat xyz. Empty when that seat is unoccupied. */
+export function readTrailForSeat(seat: number, nowMs: number): number[] {
+  buildTrails(nowMs);
+  return trailsBySeat.get(seat) ?? EMPTY_TRAIL;
+}
+
 /** How many gliders are in the sky, including this one. */
 export function playerCount(): number {
   const room = connection.room;
   if (!room?.state?.players) return 1;
   return room.state.players.size;
 }
+

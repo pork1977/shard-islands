@@ -14,6 +14,7 @@ import WorldScene from "./WorldScene";
 import PlayerGlider from "@/components/world/PlayerGlider";
 import RemoteGliders from "@/components/world/RemoteGliders";
 import PlayerLabels from "@/components/world/PlayerLabels";
+import RemoteTrails from "@/components/world/RemoteTrails";
 import ControlsHint from "./ControlsHint";
 import SpeedLines from "./SpeedLines";
 import { generateFrostedGlassNormalTexture } from "@/lib/textures/frostedGlassNormal";
@@ -40,6 +41,8 @@ function Stage() {
       <RemoteGliders />
       {/* names over every craft, gold on whoever is winning */}
       <PlayerLabels />
+      {/* and their trails, which are what the score actually is */}
+      <RemoteTrails />
       <SpeedLines />
     </>
   );

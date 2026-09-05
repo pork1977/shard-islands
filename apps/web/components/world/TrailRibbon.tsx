@@ -19,7 +19,12 @@ declare module "@react-three/fiber" {
   }
 }
 
-const MAX_POINTS = 220;
+/**
+ * Capacity, which has to be at least the score cap: trail length IS the
+ * score, and a ribbon that stops growing at 220 while the number keeps
+ * climbing would quietly lie about who is winning.
+ */
+const MAX_POINTS = 360;
 
 /**
  * Renders a trail from a flat xyz point buffer.
@@ -38,10 +43,15 @@ export default function TrailRibbon({
   points,
   width,
   opacity = 1,
+  core,
+  tail,
 }: {
   points: () => number[];
   width: number;
   opacity?: number;
+  /** Per-player tint. Left off, the material's own palette is used. */
+  core?: THREE.ColorRepresentation;
+  tail?: THREE.ColorRepresentation;
 }) {
   const materialRef = useRef<InstanceType<typeof TrailRibbonMaterial>>(null);
   const meshRef = useRef<THREE.Mesh>(null);
@@ -128,6 +138,8 @@ export default function TrailRibbon({
     <mesh ref={meshRef} geometry={geometry} frustumCulled={false} renderOrder={12}>
       <trailRibbonMaterial
         ref={materialRef}
+        {...(core !== undefined ? { uCore: core } : {})}
+        {...(tail !== undefined ? { uTail: tail } : {})}
         transparent
         depthWrite={false}
         side={THREE.DoubleSide}
