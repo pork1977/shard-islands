@@ -34,6 +34,38 @@ export class PlayerState extends Schema {
   /** Hue index into the client's palette, so players are told apart. */
   @type("uint8") colour = 0;
 
+  /**
+   * Which seat in the room this player holds, from zero.
+   *
+   * Assigned as the lowest FREE seat rather than from an ever-rising
+   * counter: seats need to be reused when somebody leaves, or after eight
+   * joins two players in the same sky end up the same colour. It doubles as
+   * the player's name — seat 0 is P1.
+   */
+  @type("uint8") seat = 0;
+
+  /**
+   * The last input sequence number this player's state includes.
+   *
+   * The whole of client-side reconciliation hangs off this one field: it
+   * tells the client which of its own predicted inputs the server has
+   * already accounted for, and therefore which ones it must replay on top
+   * of the authoritative state it just received.
+   */
+  @type("uint32") lastSeq = 0;
+
+  /** False while the player is still falling and reporting position directly. */
+  @type("boolean") simulated = false;
+
+  /**
+   * The damped stick, which is simulation state rather than an input detail:
+   * it carries between steps, so replaying inputs on top of an authoritative
+   * state without it gives a different answer than the server got. Synced
+   * for the same reason position is — the owning client needs it to replay.
+   */
+  @type("float32") smoothTurn = 0;
+  @type("float32") smoothPitch = 0;
+
   @type([TrailPoint]) trail = new ArraySchema<TrailPoint>();
 }
 

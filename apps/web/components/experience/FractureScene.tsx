@@ -18,7 +18,8 @@ import {
   fallRun,
 } from "@/lib/world/fallMotes";
 import { useFlightControls } from "@/components/controllers/useFlightControls";
-import { reportDescent } from "@/lib/net/connection";
+import { reportDescent, sendSpawn } from "@/lib/net/connection";
+import { startPrediction } from "@/lib/net/prediction";
 import {
   CRACK_DURATION,
   COLLAPSE_AT,
@@ -140,6 +141,11 @@ export default function FractureScene({ normalMap }: { normalMap: THREE.Texture 
           trailLength: STARTING_TRAIL_LENGTH + fallRun.bonus,
         },
       );
+      // Prediction starts from exactly the state the fall produced, and the
+      // server is told the same state, so both sides begin from one place.
+      startPrediction();
+      sendSpawn();
+
       beginFlight();
       return;
     }

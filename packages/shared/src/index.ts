@@ -4,3 +4,5 @@
 // "type": "module" instead. Both consumers work only in this combination.
 export * from "./constants";
 export * from "./types";
+export * from "./terrain";
+export * from "./flight";

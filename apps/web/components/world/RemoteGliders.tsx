@@ -24,12 +24,11 @@ const UP = new THREE.Vector3(0, 0, 1);
 /**
  * Everyone else in the room.
  *
- * Placed straight from the synced state each frame, with no smoothing: the
- * server ticks at 20Hz, so at 60fps this steps three times a second and
- * remote craft visibly stutter. That is on purpose for now — interpolation
- * and reconciliation are the next phase, and putting a guess in front of the
- * raw data before then would hide exactly the thing that phase needs to be
- * able to see.
+ * Drawn a tenth of a second in the past, interpolated between the two
+ * server snapshots bracketing that moment. The server ticks at 20Hz, so
+ * rendering the newest state means stepping three times a second; holding
+ * everyone slightly behind means there is nearly always a later snapshot to
+ * move toward, and the motion is continuous.
  *
  * Instanced against the same geometry the local craft uses, so a remote
  * player is recognisably the same object rather than a stand-in.
@@ -60,7 +59,7 @@ export default function RemoteGliders() {
     const mesh = meshRef.current;
     if (!mesh) return;
 
-    const players = readRemotePlayers(snapshots.current);
+    const players = readRemotePlayers(performance.now(), snapshots.current);
     const drawn = Math.min(players.length, mesh.count);
 
     for (let i = 0; i < drawn; i++) {

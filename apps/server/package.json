@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@types/node": "^20",
+    "colyseus.js": "^0.16.22",
     "tsx": "^4.19.2",
     "typescript": "^5"
   }

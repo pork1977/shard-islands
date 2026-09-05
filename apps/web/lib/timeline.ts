@@ -22,7 +22,7 @@ export const PLUNGE_AT = COLLAPSE_AT + 0.12;
  * was over before it registered — this is the stretch where the player is
  * falling through cloud watching a world resolve underneath them.
  */
-export const PLUNGE_DURATION = 7.5;
+export const PLUNGE_DURATION = 12;
 
 /** 0 while the pane is still whole, 1 once the camera is fully in the world. */
 export function revealAt(secondsSinceStrike: number): number {

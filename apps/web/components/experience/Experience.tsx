@@ -8,9 +8,12 @@ import FractureScene from "./FractureScene";
 import FallMotes from "./FallMotes";
 import FallHud from "./FallHud";
 import Presence from "./Presence";
+import NetDebug from "./NetDebug";
+import Scoreboard from "./Scoreboard";
 import WorldScene from "./WorldScene";
 import PlayerGlider from "@/components/world/PlayerGlider";
 import RemoteGliders from "@/components/world/RemoteGliders";
+import PlayerLabels from "@/components/world/PlayerLabels";
 import ControlsHint from "./ControlsHint";
 import SpeedLines from "./SpeedLines";
 import { generateFrostedGlassNormalTexture } from "@/lib/textures/frostedGlassNormal";
@@ -35,6 +38,8 @@ function Stage() {
       {phase === "flying" && <PlayerGlider />}
       {/* other people, visible from the moment the world is */}
       <RemoteGliders />
+      {/* names over every craft, gold on whoever is winning */}
+      <PlayerLabels />
       <SpeedLines />
     </>
   );
@@ -69,6 +74,8 @@ export default function Experience() {
       </Canvas>
       <FallHud />
       <Presence />
+      <Scoreboard />
+      <NetDebug />
       <ControlsHint />
     </>
   );

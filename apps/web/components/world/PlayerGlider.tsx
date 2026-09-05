@@ -6,15 +6,11 @@ import * as THREE from "three";
 import { generateGlider } from "@/lib/world/generateGlider";
 import { GliderCraftMaterial } from "@/lib/shaders/gliderCraft";
 import { useFlightControls } from "@/components/controllers/useFlightControls";
-import { reportLocalPlayer } from "@/lib/net/connection";
+import { flushInputs, readSelfSnapshot } from "@/lib/net/connection";
 import { playerState, pushTrailPoint } from "@/lib/net/playerState";
+import { predictStep, reconcile } from "@/lib/net/prediction";
 import TrailRibbon from "./TrailRibbon";
-import {
-  terrainHeightAt,
-  TERRAIN_BASE_Z,
-  TERRAIN_SIZE,
-  FLIGHT_ALTITUDE,
-} from "@/lib/world/generateTerrain";
+import HoverDraft from "./HoverDraft";
 import { FLIGHT, TRAIL } from "@shard-islands/shared";
 
 extend({ GliderCraftMaterial });
@@ -33,12 +29,6 @@ declare module "@react-three/fiber" {
 /** This world's up axis. The glass floor was looked down through along -Z. */
 const UP = new THREE.Vector3(0, 0, 1);
 
-/** Where the world starts turning you back, and where it refuses outright. */
-const BOUNDARY_SOFT = TERRAIN_SIZE * 0.34;
-const BOUNDARY_HARD = TERRAIN_SIZE * 0.44;
-/** Enough headroom to climb without leaving the world behind. */
-const CEILING = FLIGHT_ALTITUDE + 120;
-
 export default function PlayerGlider() {
   const geometry = useMemo(() => generateGlider(), []);
   const groupRef = useRef<THREE.Group>(null);
@@ -53,8 +43,11 @@ export default function PlayerGlider() {
   const lookTarget = useMemo(() => new THREE.Vector3(), []);
   const lookAt = useMemo(() => new THREE.Vector3(), []);
   const boom = useMemo(() => new THREE.Vector3(), []);
-  const smoothed = useRef({ turn: 0, pitch: 0 });
   const zoomShown = useRef(1);
+  /** Last acknowledged input, so a snapshot is reconciled once, not per frame. */
+  const lastAck = useRef(-1);
+  /** Eased, so the downwash fades in and out rather than switching. */
+  const draft = useRef(0);
   /** 0 the instant flight begins, 1 once the chase camera has taken over. */
   const handover = useRef(0);
   const seeded = useRef(false);
@@ -69,93 +62,34 @@ export default function PlayerGlider() {
       craftMaterialRef.current.uTime = state.clock.elapsedTime;
     }
 
-    // Steering is damped rather than applied directly: raw input straight
-    // into the heading makes the craft feel twitchy and toy-like, and the
-    // damping is what gives it the weight of a glider.
-    // A key is instantly at full deflection where a drag arrives gradually,
-    // which is what made keyboard flying feel twitchy. Easing the input
-    // itself gives the stick some travel instead of an on/off switch.
-    smoothed.current.turn +=
-      (inp.turn - smoothed.current.turn) * Math.min(1, dt * 3.2);
-    smoothed.current.pitch +=
-      (inp.pitch - smoothed.current.pitch) * Math.min(1, dt * 3.0);
+    // The flight model itself now lives in the shared package, so the
+    // server's authoritative tick runs the identical arithmetic. What
+    // happens here is prediction: step immediately for feel, then fold in
+    // the server's answer whenever a newer one has landed.
+    predictStep(inp, dt);
 
-    const turnTarget = -smoothed.current.turn * 1.0;
-    // positive input points the nose DOWN: drag down, or press W
-    const pitchTarget = -smoothed.current.pitch * 0.62;
+    const snapshot = readSelfSnapshot();
+    if (snapshot && snapshot.lastSeq !== lastAck.current) {
+      lastAck.current = snapshot.lastSeq;
+      reconcile(snapshot);
+    }
 
-    p.yaw += turnTarget * dt * 1.35;
-    p.pitch += (pitchTarget - p.pitch) * dt * 3.0;
-    p.pitch = THREE.MathUtils.clamp(p.pitch, -0.9, 0.9);
+    // batched and rate-limited inside; a no-op while offline
+    flushInputs(performance.now());
 
-    // bank into the turn — reads as aerodynamic rather than sliding sideways
-    // bank INTO the turn — the sign was inverted, so it leant outward like a
-    // car body-rolling rather than an aircraft
-    const rollTarget = smoothed.current.turn * 0.85;
-    p.roll += (rollTarget - p.roll) * dt * 4.0;
+    draft.current += ((inp.hover ? 1 : 0) - draft.current) * Math.min(1, dt * 3.5);
 
-    // diving gains speed, climbing bleeds it
-    const dive = Math.max(0, -Math.sin(p.pitch));
-    const climb = Math.max(0, Math.sin(p.pitch));
-    const target =
-      FLIGHT.baseForwardSpeed *
-      (1 + dive * (FLIGHT.diveSpeedMultiplier - 1) - climb * 0.35) *
-      (inp.boosting ? FLIGHT.boostSpeedMultiplier : 1);
-    // Boost engages hard and bleeds off gently. Ramping in at the same slow
-    // rate it decays at is what made shift feel like nothing was happening.
-    const responsiveness = target > p.speed ? 5.5 : 1.6;
-    p.speed += (target - p.speed) * Math.min(1, dt * responsiveness);
-    p.boosting = inp.boosting;
-
+    // The craft's basis, rebuilt from the attitude prediction just produced.
+    // This has to happen here and not inside the shared step: the step is
+    // pure arithmetic that the server runs too, and these are three.js
+    // vectors that only the renderer and the chase camera below care about.
     const cp = Math.cos(p.pitch);
     forward.set(cp * Math.cos(p.yaw), cp * Math.sin(p.yaw), Math.sin(p.pitch));
     right.crossVectors(forward, UP).normalize();
     up.crossVectors(right, forward).normalize();
 
-    p.position[0] += forward.x * p.speed * dt;
-    p.position[1] += forward.y * p.speed * dt;
-    p.position[2] += forward.z * p.speed * dt;
-    p.velocity = [forward.x * p.speed, forward.y * p.speed, forward.z * p.speed];
-
-    // Keep the player inside the map. Beyond the edge there is nothing to
-    // look at, and turning back leaves the world a long way off — so the
-    // boundary curves them round rather than letting them leave.
-    const distFromCentre = Math.hypot(p.position[0], p.position[1]);
-    if (distFromCentre > BOUNDARY_SOFT) {
-      const over = Math.min(
-        1,
-        (distFromCentre - BOUNDARY_SOFT) / (BOUNDARY_HARD - BOUNDARY_SOFT),
-      );
-      // steer the heading back toward the middle, harder the further out
-      const inward = Math.atan2(-p.position[1], -p.position[0]);
-      let delta = inward - p.yaw;
-      while (delta > Math.PI) delta -= Math.PI * 2;
-      while (delta < -Math.PI) delta += Math.PI * 2;
-      p.yaw += delta * over * dt * 1.9;
-
-      // and a hard stop at the very edge, in case they fight it the whole way
-      if (distFromCentre > BOUNDARY_HARD) {
-        const s = BOUNDARY_HARD / distFromCentre;
-        p.position[0] *= s;
-        p.position[1] *= s;
-      }
-    }
-
-    // Ground clearance sampled from the SAME height function the mesh was
-    // built from, so the player skims the actual hills rather than a guess.
-    const ground =
-      TERRAIN_BASE_Z + terrainHeightAt(p.position[0], p.position[1]) + 3.5;
-    if (p.position[2] < ground) {
-      p.position[2] = ground;
-      if (p.pitch < 0) p.pitch *= 0.4; // scrub the dive rather than ploughing in
-    }
-    p.position[2] = Math.min(p.position[2], CEILING);
-
     // arc-length sampled, so trail resolution does not depend on frame rate
     pushTrailPoint(p, TRAIL.pointSpacingMeters * 2.2, Math.round(p.trailLength));
-
-    // Rate-limited inside, to the server's own tick. A no-op while offline.
-    reportLocalPlayer(performance.now());
 
     const group = groupRef.current;
     if (!group) return;
@@ -248,6 +182,11 @@ export default function PlayerGlider() {
           />
         </mesh>
       </group>
+
+      <HoverDraft
+        strength={() => draft.current}
+        position={() => playerState.position}
+      />
 
       {/* the trail lives in world space — parenting it to the craft would
           drag the whole tail around every time the nose turns */}

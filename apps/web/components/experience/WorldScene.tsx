@@ -208,7 +208,7 @@ function Clouds({ texture }: { texture: THREE.Texture }) {
           Math.sin(angle) * radius,
           // stops well above the highest ground — decks that reach the
           // terrain smear white fog across the hills
-          -25 - t * 300,
+          -25 - t * 680,
         ],
         scale: 90 + Math.random() * 230,
         opacity: 0.2 + Math.random() * 0.45,

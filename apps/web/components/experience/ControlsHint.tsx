@@ -81,6 +81,9 @@ export default function ControlsHint() {
       <div>
         <Key>shift</Key> boost
       </div>
+      <div>
+        <Key>space</Key> hover
+      </div>
     </div>
   );
 }

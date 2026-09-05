@@ -81,8 +81,14 @@ export function descentReach(p: number): number {
 /** Trail length granted per mote. The trail IS the score, so this is the prize. */
 export const MOTE_TRAIL_BONUS = 9;
 
-/** Generous, because the player is falling past these at speed. */
-export const MOTE_PICKUP_RADIUS = 20;
+/**
+ * Generous, because the player is falling past these at speed — and then
+ * made more generous again, because in practice nobody was catching any.
+ * Twenty metres asked the player to hold a heading to within a couple of
+ * degrees for ten seconds; the mote is a reward for committing to a
+ * direction, not a test of precision flying.
+ */
+export const MOTE_PICKUP_RADIUS = 38;
 
 /** Where the player starts flying from, before any steering. */
 export const DESCENT_START_Z = 5;

@@ -8,6 +8,8 @@ export interface FlightInput {
   /** -1..1, nose down/up. */
   pitch: number;
   boosting: boolean;
+  /** Holding station: flight stops, steering does not. */
+  hover: boolean;
   /** Camera orbit offsets in radians — look around WITHOUT steering. */
   lookYaw: number;
   lookPitch: number;
@@ -29,6 +31,7 @@ export function useFlightControls(): React.RefObject<FlightInput> {
     turn: 0,
     pitch: 0,
     boosting: false,
+    hover: false,
     lookYaw: 0,
     lookPitch: 0,
     zoom: 1,
@@ -88,6 +91,13 @@ export function useFlightControls(): React.RefObject<FlightInput> {
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
+      // A toggle rather than a hold: the point of hovering is to stop and
+      // look around for a while, and holding a key down to stand still is
+      // an odd thing to ask of anyone.
+      if (e.key === " " && !e.repeat) {
+        e.preventDefault();
+        input.current.hover = !input.current.hover;
+      }
       keys.add(e.key.toLowerCase());
       updateFromKeys();
     };
@@ -113,7 +123,13 @@ export function useFlightControls(): React.RefObject<FlightInput> {
         input.current.turn = 0;
         input.current.pitch = 0;
       }
-      input.current.boosting = keys.has(" ") || keys.has("shift");
+      // Shift alone boosts now: space has been taken for hover, and it was
+      // only ever an undocumented second binding for the same thing.
+      input.current.boosting = keys.has("shift");
+
+      // Any deliberate throttle input means the player wants to fly again.
+      // A hover you cannot get out of by pressing forward is a trap.
+      if (up || down || input.current.boosting) input.current.hover = false;
     }
 
     // right-drag is a legitimate way to swing the camera round, and a context
