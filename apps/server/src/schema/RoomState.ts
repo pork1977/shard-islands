@@ -172,6 +172,30 @@ export class PlayerState extends Schema {
   @type("float32") smoothTurn = 0;
   @type("float32") smoothPitch = 0;
 
+  /**
+   * The barrel roll and the shove, both carried for the same reason as the
+   * damped stick: they persist between steps, so an owning client replaying
+   * its unacknowledged inputs without them lands somewhere else.
+   */
+  @type("float32") rollSpin = 0;
+  @type("float32") rollDir = 0;
+  @type("float32") rollCooldown = 0;
+  @type("float32") shoveX = 0;
+  @type("float32") shoveY = 0;
+  @type("float32") shoveZ = 0;
+
+  /**
+   * Shockwaves this craft has thrown, and where the last one went off.
+   *
+   * A counter, like the clip counter, because it is an event and events
+   * have to survive a dropped packet: a client that missed the one tick a
+   * roll was starting on would simply never draw it.
+   */
+  @type("uint16") rolls = 0;
+  @type("float32") rollX = 0;
+  @type("float32") rollY = 0;
+  @type("float32") rollZ = 0;
+
   @type([TrailPoint]) trail = new ArraySchema<TrailPoint>();
 }
 

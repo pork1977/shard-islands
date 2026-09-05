@@ -680,6 +680,78 @@ export function readClipStanding(): ClipStanding | null {
   };
 }
 
+/** A shockwave going off, somewhere in the sky. */
+export interface RollEvent {
+  x: number;
+  y: number;
+  z: number;
+  colour: number;
+  seat: number;
+  self: boolean;
+}
+
+/**
+ * Barrel rolls fired since this was last asked.
+ *
+ * The same counter-and-position shape as the clip events, and keyed by
+ * session id for the same hard-won reason: seats are reused, and a seat's
+ * stale counter silently swallows every event its next occupant produces.
+ *
+ * ONE consumer only — reading is what marks an event delivered.
+ */
+const lastRollCount = new Map<string, number>();
+
+export function readRollEvents(into: RollEvent[]): RollEvent[] {
+  into.length = 0;
+
+  const players = connection.room?.state?.players;
+  if (!players) return into;
+
+  const present = new Set<string>();
+
+  players.forEach(
+    (
+      player: {
+        seat: number;
+        colour: number;
+        rolls: number;
+        rollX: number;
+        rollY: number;
+        rollZ: number;
+      },
+      id: string,
+    ) => {
+      present.add(id);
+      const seen = lastRollCount.get(id);
+      lastRollCount.set(id, player.rolls);
+      if (seen === undefined || player.rolls <= seen) return;
+
+      into.push({
+        x: player.rollX,
+        y: player.rollY,
+        z: player.rollZ,
+        colour: player.colour,
+        seat: player.seat,
+        self: id === connection.selfId,
+      });
+    },
+  );
+
+  for (const id of lastRollCount.keys()) {
+    if (!present.has(id)) lastRollCount.delete(id);
+  }
+
+  return into;
+}
+
+/** Seconds until this player can barrel roll again; 0 when ready. */
+export function readRollCooldown(): number {
+  const self = connection.room?.state?.players?.get(connection.selfId) as
+    | { rollCooldown: number }
+    | undefined;
+  return self?.rollCooldown ?? 0;
+}
+
 /** What the Beacon is doing. */
 export interface BeaconView {
   charge: number;

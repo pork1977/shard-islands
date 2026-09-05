@@ -1,4 +1,4 @@
-import { FLIGHT } from "./constants";
+import { FLIGHT, ROLL } from "./constants";
 import {
   terrainHeightAt,
   TERRAIN_BASE_Z,
@@ -38,6 +38,14 @@ export interface FlightInput {
    * turn on the spot and look around — which is the entire point of it.
    */
   hover?: boolean;
+  /**
+   * Fire a barrel roll, -1 or 1 for the direction; 0 or absent for no.
+   *
+   * A request, not a command: the step decides whether it is allowed, using
+   * only state both sides have, so the client's prediction and the server's
+   * answer agree about whether the roll happened without either asking.
+   */
+  roll?: number;
 }
 
 /**
@@ -67,6 +75,31 @@ export interface FlightSim {
    * server used or every drafted second becomes a correction.
    */
   draft: number;
+
+  /**
+   * Radians of barrel roll left to turn through, and the direction.
+   *
+   * Simulation state for the same reason the damped stick is: it carries
+   * between steps. Both sides start a roll from the same request under the
+   * same rule and turn through it at the same rate, so neither has to be
+   * told what the other did.
+   */
+  rollSpin: number;
+  rollDir: number;
+  /** Seconds until another roll is allowed. */
+  rollCooldown: number;
+
+  /**
+   * Velocity handed to this craft by somebody else's shockwave, decaying.
+   *
+   * Set by the room — only the room knows who was near whom — and synced,
+   * so the owning client replays against the same push it was given. A
+   * shove the client did not know about would be a correction every frame
+   * it lasted.
+   */
+  shoveX: number;
+  shoveY: number;
+  shoveZ: number;
 }
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
@@ -89,6 +122,12 @@ export function createFlightSim(
     smoothTurn: 0,
     smoothPitch: 0,
     draft: 1,
+    rollSpin: 0,
+    rollDir: 0,
+    rollCooldown: 0,
+    shoveX: 0,
+    shoveY: 0,
+    shoveZ: 0,
   };
 }
 
@@ -104,6 +143,12 @@ export function copyFlightSim(from: FlightSim, into: FlightSim): FlightSim {
   into.smoothTurn = from.smoothTurn;
   into.smoothPitch = from.smoothPitch;
   into.draft = from.draft;
+  into.rollSpin = from.rollSpin;
+  into.rollDir = from.rollDir;
+  into.rollCooldown = from.rollCooldown;
+  into.shoveX = from.shoveX;
+  into.shoveY = from.shoveY;
+  into.shoveZ = from.shoveZ;
   return into;
 }
 
@@ -136,6 +181,19 @@ export function stepFlight(s: FlightSim, input: FlightInput, dt: number): void {
 
   const hovering = input.hover === true;
 
+  // The barrel roll. Started here rather than by the room so that the
+  // client's own prediction fires on the exact frame the key was pressed —
+  // a defensive move that waited a round trip to begin would be useless.
+  // The cooldown lives in the sim, so both sides refuse it in the same
+  // places without a word passing between them.
+  if (s.rollCooldown > 0) s.rollCooldown = Math.max(0, s.rollCooldown - dt);
+  const wants = input.roll ?? 0;
+  if (wants !== 0 && s.rollSpin <= 0 && s.rollCooldown <= 0) {
+    s.rollSpin = Math.PI * 2;
+    s.rollDir = wants < 0 ? -1 : 1;
+    s.rollCooldown = ROLL.cooldownSeconds;
+  }
+
   const turnTarget = -s.smoothTurn * 1.0;
   // positive input points the nose DOWN: drag down, or press W. Hovering
   // levels the craft out, because a nose-down aircraft holding station
@@ -146,9 +204,24 @@ export function stepFlight(s: FlightSim, input: FlightInput, dt: number): void {
   s.pitch += (pitchTarget - s.pitch) * dt * 3.0;
   s.pitch = clamp(s.pitch, -0.9, 0.9);
 
-  // bank INTO the turn — reads as aerodynamic rather than sliding sideways
-  const rollTarget = s.smoothTurn * 0.85;
-  s.roll += (rollTarget - s.roll) * dt * 4.0;
+  if (s.rollSpin > 0) {
+    // Mid-roll: the barrel overrides the bank entirely. Turning through
+    // exactly two pi means the craft finishes where it started, so the
+    // angle can be normalised at the end without anything appearing to jump.
+    const step = Math.min(s.rollSpin, ((Math.PI * 2) / ROLL.durationSeconds) * dt);
+    s.roll += s.rollDir * step;
+    s.rollSpin -= step;
+    if (s.rollSpin <= 1e-6) {
+      s.rollSpin = 0;
+      s.rollDir = 0;
+      while (s.roll > Math.PI) s.roll -= Math.PI * 2;
+      while (s.roll < -Math.PI) s.roll += Math.PI * 2;
+    }
+  } else {
+    // bank INTO the turn — reads as aerodynamic rather than sliding sideways
+    const rollTarget = s.smoothTurn * 0.85;
+    s.roll += (rollTarget - s.roll) * dt * 4.0;
+  }
 
   // diving gains speed, climbing bleeds it
   const dive = Math.max(0, -Math.sin(s.pitch));
@@ -176,6 +249,25 @@ export function stepFlight(s: FlightSim, input: FlightInput, dt: number): void {
   s.x += fx * s.speed * dt;
   s.y += fy * s.speed * dt;
   s.z += fz * s.speed * dt;
+
+  // Somebody else's shockwave, still pushing. Applied after the craft's own
+  // motion and decayed afterwards, so the order is the same on both sides.
+  if (s.shoveX !== 0 || s.shoveY !== 0 || s.shoveZ !== 0) {
+    s.x += s.shoveX * dt;
+    s.y += s.shoveY * dt;
+    s.z += s.shoveZ * dt;
+    const decay = Math.exp(-dt * ROLL.shoveDamping);
+    s.shoveX *= decay;
+    s.shoveY *= decay;
+    s.shoveZ *= decay;
+    // Below a walking pace it is not a shove any more, and leaving it to
+    // trail off asymptotically keeps the field dirty forever.
+    if (Math.abs(s.shoveX) + Math.abs(s.shoveY) + Math.abs(s.shoveZ) < 0.05) {
+      s.shoveX = 0;
+      s.shoveY = 0;
+      s.shoveZ = 0;
+    }
+  }
 
   // Keep the player inside the map. Beyond the edge there is nothing to look
   // at, and turning back leaves the world a long way off — so the boundary

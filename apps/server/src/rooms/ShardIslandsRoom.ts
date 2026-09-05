@@ -1,6 +1,7 @@
 import { Room, type Client } from "@colyseus/core";
 import {
   ROOM,
+  ROLL,
   SERVER_TICK_RATE_HZ,
   TRAIL,
   BEACON,
@@ -32,6 +33,8 @@ interface InputSample {
   pitch: number;
   boosting: boolean;
   hover: boolean;
+  /** -1, 0 or 1: a request to barrel roll. */
+  roll: number;
   dt: number;
 }
 
@@ -225,6 +228,10 @@ export class ShardIslandsRoom extends Room<RoomState> {
           pitch: clamp(sample.pitch, -1, 1),
           boosting: !!sample.boosting,
           hover: !!sample.hover,
+          // Only the sign matters, and the step decides whether it is
+          // allowed — a client asking to roll every frame simply gets one
+          // roll and then a cooldown, exactly as an honest one would.
+          roll: sample.roll ? (sample.roll < 0 ? -1 : 1) : 0,
           dt: clamp(sample.dt, 0, MAX_SAMPLE_DT),
         });
       }
@@ -308,6 +315,11 @@ export class ShardIslandsRoom extends Room<RoomState> {
       rt.fromY = rt.sim.y;
       rt.fromZ = rt.sim.z;
 
+      // Whether a roll was already under way before this tick's input, so
+      // the shockwave fires once at the moment it begins and not on every
+      // tick it is still turning through.
+      const wasRolling = rt.sim.rollSpin > 0;
+
       let applied = 0;
       while (rt.pending.length > 0 && applied < MAX_SAMPLES_PER_TICK) {
         const sample = rt.pending.shift()!;
@@ -334,10 +346,13 @@ export class ShardIslandsRoom extends Room<RoomState> {
             pitch: rt.sim.smoothPitch,
             boosting: rt.sim.boosting,
             hover: rt.hovering,
+            roll: 0,
           },
           1 / SERVER_TICK_RATE_HZ,
         );
       }
+
+      if (!wasRolling && rt.sim.rollSpin > 0) this.fireShockwave(player, rt, now);
 
       this.collectCores(player, rt, rt.fromX, rt.fromY, rt.fromZ);
       this.collectShards(player, rt, now);
@@ -538,6 +553,12 @@ export class ShardIslandsRoom extends Room<RoomState> {
     player.smoothTurn = rt.sim.smoothTurn;
     player.smoothPitch = rt.sim.smoothPitch;
     player.draft = rt.sim.draft;
+    player.rollSpin = rt.sim.rollSpin;
+    player.rollDir = rt.sim.rollDir;
+    player.rollCooldown = rt.sim.rollCooldown;
+    player.shoveX = rt.sim.shoveX;
+    player.shoveY = rt.sim.shoveY;
+    player.shoveZ = rt.sim.shoveZ;
     player.lastSeq = rt.lastSeq;
   }
 
@@ -696,6 +717,78 @@ export class ShardIslandsRoom extends Room<RoomState> {
         player.trailLength + CORE_TRAIL_VALUE * this.yieldFor(player),
       );
       player.cores += 1;
+    }
+  }
+
+  /**
+   * A barrel roll just started: throw everything nearby clear.
+   *
+   * The only interaction in the game that takes nothing from anybody. It
+   * does not cut, it does not steal, it does not score — it buys the pilot
+   * a moment and some distance, which is precisely what the game had no way
+   * of offering to somebody being hunted.
+   *
+   * Colour is deliberately ignored. A shockwave is not aimed, and a wall of
+   * air that politely parts around your own team would be a strange thing
+   * to explain; it also means a badly timed roll scatters your own allies,
+   * which is a real cost to weigh.
+   */
+  private fireShockwave(roller: PlayerState, rt: Runtime, now: number) {
+    const radiusSq = ROLL.radius * ROLL.radius;
+    let caught = 0;
+
+    this.state.players.forEach((other, otherId) => {
+      if (otherId === roller.id) return;
+      if (other.away) return;
+      const ort = this.runtime.get(otherId);
+      if (!ort || !ort.simulating) return;
+
+      const dx = ort.sim.x - rt.sim.x;
+      const dy = ort.sim.y - rt.sim.y;
+      const dz = ort.sim.z - rt.sim.z;
+      const distSq = dx * dx + dy * dy + dz * dz;
+      if (distSq > radiusSq) return;
+
+      // Straight out from the roller. A craft sitting exactly on top of one
+      // has no direction to be thrown in, so it gets thrown upward.
+      const dist = Math.sqrt(distSq);
+      const nx = dist > 0.01 ? dx / dist : 0;
+      const ny = dist > 0.01 ? dy / dist : 0;
+      const nz = dist > 0.01 ? dz / dist : 1;
+
+      // Hardest at the centre, tailing off to nothing at the rim, so there
+      // is no cliff edge where one metre decides everything.
+      const falloff = 1 - dist / ROLL.radius;
+      const push = ROLL.shoveSpeed * (0.35 + 0.65 * falloff);
+
+      ort.sim.shoveX += nx * push;
+      ort.sim.shoveY += ny * push;
+      ort.sim.shoveZ += nz * push;
+      other.shoveX = ort.sim.shoveX;
+      other.shoveY = ort.sim.shoveY;
+      other.shoveZ = ort.sim.shoveZ;
+      caught++;
+    });
+
+    // Paid for whether or not it caught anybody: it is a panic button, and
+    // one that is free when it misses is one you hold down.
+    roller.trailLength = Math.max(
+      CLIP.minTrailLength,
+      roller.trailLength - ROLL.trailCost,
+    );
+
+    // The guard is the real defence. The shove alone cannot save a craft
+    // from somebody already committed to the pass.
+    rt.immuneUntil = Math.max(rt.immuneUntil, now + ROLL.guardMs);
+    roller.immuneMs = Math.min(65535, rt.immuneUntil - now);
+
+    roller.rolls += 1;
+    roller.rollX = rt.sim.x;
+    roller.rollY = rt.sim.y;
+    roller.rollZ = rt.sim.z;
+
+    if (caught > 0) {
+      console.log(`[room] P${roller.seat + 1} shockwave threw ${caught} clear`);
     }
   }
 

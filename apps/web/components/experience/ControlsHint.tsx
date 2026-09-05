@@ -84,6 +84,11 @@ export default function ControlsHint() {
       <div>
         <Key>space</Key> hover
       </div>
+      {/* the one control nobody would ever discover on their own */}
+      <div>
+        <Key>AA</Key>
+        <Key>DD</Key> roll
+      </div>
     </div>
   );
 }

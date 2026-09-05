@@ -129,6 +129,61 @@ export const CLIP = {
   shardPickupRadius: 20,
 } as const;
 
+/**
+ * The Shockwave Barrel Roll.
+ *
+ * Everything the game has built so far is offence: draft to catch somebody,
+ * cut across them to take their trail, overcharge to become untouchable.
+ * There has been no answer to being hunted except to fly away, and the
+ * craft that is being hunted is by definition the slower one.
+ *
+ * So: snap into a full roll and throw everything nearby off you. It shoves,
+ * it does not kill — this is the one interaction in the game that takes
+ * nothing from anybody, which is exactly why it can afford to be usable
+ * whenever you are in trouble.
+ *
+ * It is also the counterplay to overcharge, which otherwise had none worth
+ * the name. The guard outlasts the shove, so a roll timed into somebody's
+ * live wake gets you through it.
+ */
+export const ROLL = {
+  /** How quickly the second tap has to follow the first. */
+  doubleTapMs: 300,
+  /** How long the craft is inverted. */
+  durationSeconds: 0.62,
+  /**
+   * Before another. Long enough that it is a decision rather than a habit,
+   * short enough to be there when a second attacker arrives.
+   */
+  cooldownSeconds: 6,
+
+  /** Everything inside this is thrown clear. */
+  radius: 34,
+  /** How hard, as metres per second of velocity handed to the victim. */
+  shoveSpeed: 46,
+  /** How quickly that bleeds off. Higher is snappier. */
+  shoveDamping: 2.6,
+
+  /**
+   * Immunity to being cut, from the moment the roll starts.
+   *
+   * Deliberately longer than the roll itself. The shove alone would not
+   * save anybody — a craft already committed to a pass is through you
+   * before the push has moved it far enough — so the roll has to buy time
+   * as well as distance, or it would look like a defence and not be one.
+   */
+  guardMs: 1400,
+
+  /**
+   * What it costs in trail.
+   *
+   * A defence with no price is simply held down. Paying score for it means
+   * rolling out of trouble has cost you the thing you were in trouble over,
+   * which is the right shape for a panic button.
+   */
+  trailCost: 8,
+} as const;
+
 export const INTERACTION_RADII = {
   /**
    * Raised from 3. At three metres, catching a slipstream at fifty metres a
@@ -138,7 +193,8 @@ export const INTERACTION_RADII = {
   draftLateral: 7,
   /** Superseded by CLIP.radius, which is the real one. */
   tailClip: CLIP.radius,
-  barrelRoll: 12,
+  /** Superseded by ROLL.radius, which is the real one. */
+  barrelRoll: ROLL.radius,
   crystalVoidEvent: 40,
 } as const;
 

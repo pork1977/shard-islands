@@ -13,6 +13,7 @@ import Scoreboard from "./Scoreboard";
 import DraftHud from "./DraftHud";
 import ClipHud from "./ClipHud";
 import BeaconHud from "./BeaconHud";
+import RollHud from "./RollHud";
 import WorldScene from "./WorldScene";
 import PlayerGlider from "@/components/world/PlayerGlider";
 import RemoteGliders from "@/components/world/RemoteGliders";
@@ -21,6 +22,7 @@ import RemoteTrails from "@/components/world/RemoteTrails";
 import EnergyCores from "@/components/world/EnergyCores";
 import ClipShards from "@/components/world/ClipShards";
 import ClipBursts from "@/components/world/ClipBursts";
+import Shockwaves from "@/components/world/Shockwaves";
 import SceneProbe from "./SceneProbe";
 import ControlsHint from "./ControlsHint";
 import SpeedLines from "./SpeedLines";
@@ -55,6 +57,8 @@ function Stage() {
       {/* and what is left of whoever lost a fight over one */}
       <ClipShards />
       <ClipBursts />
+      {/* and the one interaction that takes nothing from anybody */}
+      <Shockwaves />
       <SpeedLines />
       {/* development only: lets the scene graph be inspected from outside */}
       <SceneProbe />
@@ -98,6 +102,7 @@ export default function Experience() {
       <DraftHud />
       <ClipHud />
       <BeaconHud />
+      <RollHud />
       <NetDebug />
       <ControlsHint />
     </>

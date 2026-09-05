@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { ROLL } from "@shard-islands/shared";
 
 export interface FlightInput {
   /** -1..1, steer left/right. */
@@ -26,6 +27,30 @@ export interface FlightInput {
  * splitting on pointer type is what lets one gesture mean the right thing
  * on each device. Keyboard always steers.
  */
+/**
+ * A barrel roll waiting to be fired: -1 left, 1 right, 0 for nothing.
+ *
+ * Kept outside React deliberately. It is a latch rather than a state — one
+ * double tap has to become exactly one roll, however many frames pass
+ * before the next simulation step reads it — and the reader has to clear it
+ * as it takes it. That is not a thing a ref full of held stick positions
+ * should be doing, and the renderer is not allowed to write to one during
+ * a frame anyway.
+ */
+let pendingRoll = 0;
+
+/** Called by the input handlers below when a double tap lands. */
+function requestRoll(direction: number) {
+  pendingRoll = direction;
+}
+
+/** Called once per simulation step. Reading it is what consumes it. */
+export function takeRoll(): number {
+  const roll = pendingRoll;
+  pendingRoll = 0;
+  return roll;
+}
+
 export function useFlightControls(): React.RefObject<FlightInput> {
   const input = useRef<FlightInput>({
     turn: 0,
@@ -53,6 +78,12 @@ export function useFlightControls(): React.RefObject<FlightInput> {
     const range = () => Math.min(window.innerWidth, window.innerHeight) * 0.28;
 
     const onPointerDown = (e: PointerEvent) => {
+      // A phone has no second key to spare, so the same gesture the plan
+      // describes does the job: two quick taps that are not a drag. Which
+      // side of the screen decides the direction.
+      if (e.pointerType !== "mouse") {
+        tapped("touch", e.clientX < window.innerWidth / 2 ? -1 : 1);
+      }
       drag.active = true;
       drag.steering = e.pointerType !== "mouse";
       drag.originX = e.clientX;
@@ -90,6 +121,29 @@ export function useFlightControls(): React.RefObject<FlightInput> {
       drag.steering = false;
     };
 
+    /** When each steering key was last pressed, for the double tap. */
+    const lastTap = new Map<string, number>();
+
+    /**
+     * Two taps of the same steering key inside the window is a barrel roll.
+     *
+     * Bound to A and D rather than to a key of its own because it is a
+     * roll: the gesture and the manoeuvre are the same direction, so there
+     * is nothing to learn. The cost of that choice is that a fast
+     * left-left correction can fire one by accident, which is survivable —
+     * the move takes trail rather than giving it away, so a stray roll is
+     * a small tax and never a disaster.
+     */
+    const tapped = (key: string, dir: number) => {
+      const now = performance.now();
+      const previous = lastTap.get(key) ?? -Infinity;
+      lastTap.set(key, now);
+      if (now - previous <= ROLL.doubleTapMs) {
+        requestRoll(dir);
+        lastTap.delete(key); // three taps is not two rolls
+      }
+    };
+
     const onKeyDown = (e: KeyboardEvent) => {
       // A toggle rather than a hold: the point of hovering is to stop and
       // look around for a while, and holding a key down to stand still is
@@ -98,7 +152,12 @@ export function useFlightControls(): React.RefObject<FlightInput> {
         e.preventDefault();
         input.current.hover = !input.current.hover;
       }
-      keys.add(e.key.toLowerCase());
+      const key = e.key.toLowerCase();
+      if (!e.repeat) {
+        if (key === "a" || key === "arrowleft") tapped("left", -1);
+        if (key === "d" || key === "arrowright") tapped("right", 1);
+      }
+      keys.add(key);
       updateFromKeys();
     };
     const onKeyUp = (e: KeyboardEvent) => {

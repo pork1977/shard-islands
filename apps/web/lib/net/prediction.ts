@@ -30,6 +30,8 @@ export interface InputSample {
   pitch: number;
   boosting: boolean;
   hover: boolean;
+  /** -1, 0 or 1. Recorded like any other input so a replay re-fires it. */
+  roll: number;
   dt: number;
 }
 
@@ -50,6 +52,13 @@ export interface SelfSnapshot {
   trailLength: number;
   /** Slipstream multiplier the room has us on. */
   draft: number;
+  /** Mid-roll state and any shove we have been given, all replayable. */
+  rollSpin: number;
+  rollDir: number;
+  rollCooldown: number;
+  shoveX: number;
+  shoveY: number;
+  shoveZ: number;
 }
 
 /**
@@ -126,6 +135,7 @@ export function predictStep(input: FlightInput, dt: number) {
     pitch: input.pitch,
     boosting: input.boosting,
     hover: input.hover === true,
+    roll: input.roll ?? 0,
     dt,
   };
 
@@ -185,6 +195,15 @@ export function reconcile(snapshot: SelfSnapshot) {
   // Drafting is the room's call, so it arrives with the rest of the state and
   // the replay below runs against the same multiplier the server used.
   sim.draft = snapshot.draft > 0 ? snapshot.draft : 1;
+  // Adopted like everything else the step reads. A replay that started from
+  // the authoritative position but the client's own idea of the roll it was
+  // half way through would diverge for as long as the roll lasted.
+  sim.rollSpin = snapshot.rollSpin;
+  sim.rollDir = snapshot.rollDir;
+  sim.rollCooldown = snapshot.rollCooldown;
+  sim.shoveX = snapshot.shoveX;
+  sim.shoveY = snapshot.shoveY;
+  sim.shoveZ = snapshot.shoveZ;
   if (snapshot.trailLength > 0) playerState.trailLength = snapshot.trailLength;
 
   let kept = 0;

@@ -5,7 +5,7 @@ import { extend, useFrame, type ThreeElements } from "@react-three/fiber";
 import * as THREE from "three";
 import { generateGlider } from "@/lib/world/generateGlider";
 import { GliderCraftMaterial } from "@/lib/shaders/gliderCraft";
-import { useFlightControls } from "@/components/controllers/useFlightControls";
+import { takeRoll, useFlightControls } from "@/components/controllers/useFlightControls";
 import { flushInputs, readBeacon, readSelfSnapshot } from "@/lib/net/connection";
 import { playerState, pushTrailPoint } from "@/lib/net/playerState";
 import { predictStep, reconcile } from "@/lib/net/prediction";
@@ -65,6 +65,22 @@ export default function PlayerGlider() {
   const seeded = useRef(false);
   const basis = useMemo(() => new THREE.Matrix4(), []);
 
+  /**
+   * The stick as the shared step wants it, reused every frame.
+   *
+   * The controls hold a barrel roll as a LATCH rather than as a held state,
+   * and this is where it is consumed — exactly once, whatever the frame
+   * rate. Reading it straight off the controls object would re-fire the
+   * same double tap on every frame until the key was pressed again.
+   */
+  const stickRef = useRef({
+    turn: 0,
+    pitch: 0,
+    boosting: false,
+    hover: false,
+    roll: 0,
+  });
+
   useFrame((state, rawDelta) => {
     const dt = Math.min(rawDelta, 1 / 20); // a stall must not teleport the player
     const p = playerState;
@@ -78,7 +94,14 @@ export default function PlayerGlider() {
     // server's authoritative tick runs the identical arithmetic. What
     // happens here is prediction: step immediately for feel, then fold in
     // the server's answer whenever a newer one has landed.
-    predictStep(inp, dt);
+    const stick = stickRef.current;
+    stick.turn = inp.turn;
+    stick.pitch = inp.pitch;
+    stick.boosting = inp.boosting;
+    stick.hover = inp.hover;
+    stick.roll = takeRoll();
+
+    predictStep(stick, dt);
 
     const snapshot = readSelfSnapshot();
     if (snapshot && snapshot.lastSeq !== lastAck.current) {
