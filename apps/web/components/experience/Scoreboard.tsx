@@ -3,17 +3,7 @@
 import { useEffect, useState } from "react";
 import { readRoster, type RosterEntry } from "@/lib/net/connection";
 import { useGameStore } from "@/lib/store/useGameStore";
-
-const SEAT_COLOURS = [
-  "#5fe4ff",
-  "#ff7ad9",
-  "#9dff6b",
-  "#ffc247",
-  "#b98cff",
-  "#ff6b5f",
-  "#6bffd0",
-  "#ffffff",
-];
+import { SEAT_COLOURS } from "@/lib/world/seatColours";
 
 /**
  * Who is longest.

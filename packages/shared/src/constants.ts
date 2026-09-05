@@ -20,7 +20,17 @@ export const FLIGHT = {
 export const TRAIL = {
   pointSpacingMeters: 0.75, // arc-length spacing between recorded trail points
   hotSegmentLength: 24, // most-recent points kept at full resolution for collision
-  baseThickness: 0.4,
+  /**
+   * Widened from 0.4 for tail-clip.
+   *
+   * A trail you can be killed for touching has to be a thing you can SEE
+   * from a distance and judge the edge of. At the old width it was a
+   * filament under a metre across in a sky two point eight kilometres wide —
+   * fine as decoration, impossible as a hazard, and any hitbox generous
+   * enough to be playable would have been many times wider than the thing
+   * being drawn. Widening the ribbon is what lets the hitbox be honest.
+   */
+  baseThickness: 1.4,
 } as const;
 
 /**
@@ -44,6 +54,70 @@ export const DRAFT = {
   hotPoints: 34,
 } as const;
 
+/**
+ * Tail-Clip.
+ *
+ * Cut across somebody else's wake and it severs: everything behind the cut
+ * stops being theirs and scatters as shards for whoever gets there first.
+ *
+ * Two gates, and between them they turn eight arbitrary colours into teams:
+ *
+ *   Your own colour cannot be clipped at all. That is Paul's rule, and this
+ *   is the half of it that carries its weight — a player who shares your
+ *   hue is somebody you can fly alongside at speed with no risk, which is
+ *   the entire reason to seek them out.
+ *
+ *   You have to cut ACROSS a wake rather than follow it. Without that,
+ *   drafting a stranger — which sits you directly on their trail by
+ *   design — would sever it instantly, and the two mechanics would be
+ *   unable to coexist. With it they interlock: tuck in behind a rival for
+ *   the small draft, or cut across them for the kill.
+ */
+export const CLIP = {
+  /**
+   * How close the clipper's path has to come to the victim's ribbon.
+   *
+   * Comfortably wider than the ribbon is drawn, and deliberately so: the
+   * plan's hard constraint is that nothing may require fine motor
+   * precision, and a hitbox measured to the pixel would make the highest
+   * stakes mechanic in the game a lottery at flying speed.
+   */
+  radius: 4,
+  /**
+   * Above this much agreement with the wake's own direction you are
+   * following it, not cutting it — and following is what drafting is for.
+   */
+  maxHeadingAgreement: 0.35,
+  /** Grace after being cut, so nobody is chain-clipped down to nothing. */
+  immunityMs: 2600,
+  /** No cut leaves a player with less than this. */
+  minTrailLength: 14,
+  /**
+   * How much of the severed trail comes back as shards. The rest is simply
+   * gone — a clip has to cost the world something, or trail length only
+   * ever inflates.
+   */
+  shardYield: 0.7,
+  /** Most shards one cut can scatter, however long the severed tail was. */
+  maxShards: 12,
+  /**
+   * How long shards lie there before fading. Long enough for a fight over
+   * them, short enough that the sky does not silt up with old kills.
+   */
+  shardLifeMs: 26000,
+  /**
+   * Dead time before a shard can be taken.
+   *
+   * Without it the victim simply re-collects their own tail on the spot,
+   * having lost nothing. A second and a half of flight at cruise puts both
+   * craft forty metres past the cut, so both have to turn and come back —
+   * which is the fight the mechanic exists to create.
+   */
+  shardArmMs: 1500,
+  /** Same generous bubble the cores use; a shard is a pickup like any other. */
+  shardPickupRadius: 20,
+} as const;
+
 export const INTERACTION_RADII = {
   /**
    * Raised from 3. At three metres, catching a slipstream at fifty metres a
@@ -51,7 +125,8 @@ export const INTERACTION_RADII = {
    * somebody's wake, not landing a precision shot.
    */
   draftLateral: 7,
-  tailClip: 0.6, // added to trail thickness/2 for the capsule test
+  /** Superseded by CLIP.radius, which is the real one. */
+  tailClip: CLIP.radius,
   barrelRoll: 12,
   crystalVoidEvent: 40,
 } as const;

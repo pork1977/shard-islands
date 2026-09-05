@@ -55,13 +55,6 @@ export default function NetDebug() {
    * panel would simply reappear a second after every attempt to close it.
    */
   const dismissed = useRef(false);
-  /** Mirrors of the two flags, so the key handler can read them without
-   *  being re-bound on every change. */
-  const shownRef = useRef(false);
-  const alarmedRef = useRef(false);
-  shownRef.current = shown;
-  alarmedRef.current = alarmed;
-
   const [stats, setStats] = useState({
     error: 0,
     worst: 0,
@@ -77,14 +70,17 @@ export default function NetDebug() {
       if (e.key !== "F3") return;
       // the browser's own find-again binding, which we are borrowing
       e.preventDefault();
-      const visible = shownRef.current || alarmedRef.current;
+      const visible = shown || alarmed;
       if (visible) dismissed.current = true;
       setShown(!visible);
       setAlarmed(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    // Re-bound when either flag changes: the handler has to know whether the
+    // panel is currently up, and reading that from a ref during render is
+    // exactly the thing refs are not for.
+  }, [shown, alarmed]);
 
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;

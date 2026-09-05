@@ -13,6 +13,30 @@ export class TrailPoint extends Schema {
   @type("float32") z = 0;
 }
 
+/**
+ * A piece of somebody's severed trail, lying in the sky waiting to be taken.
+ *
+ * Unlike the Energy Cores these cannot be generated from a shared seed —
+ * they appear wherever a fight happened — so their positions really do go
+ * over the wire. They are also the only genuinely dynamic entity in the
+ * world, which is why they carry an id: the client animates each one in and
+ * out, and needs to know that the shard at index three is still the same
+ * shard it was drawing last frame after somebody ahead of it was taken.
+ */
+export class ClipShard extends Schema {
+  @type("uint32") id = 0;
+
+  @type("float32") x = 0;
+  @type("float32") y = 0;
+  @type("float32") z = 0;
+
+  /** Trail points this shard is worth to whoever collects it. */
+  @type("uint8") value = 1;
+
+  /** The colour of the player it was cut from, so a kill reads at a glance. */
+  @type("uint8") colour = 0;
+}
+
 export class PlayerState extends Schema {
   @type("string") id = "";
 
@@ -43,6 +67,29 @@ export class PlayerState extends Schema {
 
   /** Hue index into the client's palette, so players are told apart. */
   @type("uint8") colour = 0;
+
+  /**
+   * Times this player has been cut, and where the last cut happened.
+   *
+   * The counter is the event: clients watch it for a change and play the
+   * burst at the recorded point. Sending it this way rather than as a
+   * message means a client that joins, drops a packet, or looks away still
+   * ends up agreeing with everybody else about what the world looks like —
+   * which for the highest-stakes mechanic in the game is the whole point.
+   */
+  @type("uint16") clipsTaken = 0;
+  @type("float32") clipX = 0;
+  @type("float32") clipY = 0;
+  @type("float32") clipZ = 0;
+
+  /** Cuts this player has landed, for their own scoreline. */
+  @type("uint16") clipsMade = 0;
+
+  /**
+   * Milliseconds of protection left after being cut. Synced so the player
+   * can see they are safe, and so nobody else wastes a pass on them.
+   */
+  @type("uint16") immuneMs = 0;
 
   /**
    * Which seat in the room this player holds, from zero.
@@ -89,6 +136,16 @@ export class RoomState extends Schema {
    * which is a single boolean per pickup.
    */
   @type(["boolean"]) coresTaken = new ArraySchema<boolean>();
+
+  /**
+   * Trail fragments scattered by tail-clips, and collectible by anyone.
+   *
+   * Held in the room rather than on the victim: once a piece of trail has
+   * been cut loose it belongs to nobody, and whoever reaches it first owns
+   * it — including the player it was taken from, if they turn around fast
+   * enough.
+   */
+  @type([ClipShard]) shards = new ArraySchema<ClipShard>();
 
   /** Server tick count, useful for debugging desync. */
   @type("uint32") tick = 0;

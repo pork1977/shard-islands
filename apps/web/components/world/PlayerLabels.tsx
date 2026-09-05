@@ -13,20 +13,8 @@ import {
 } from "@/lib/net/connection";
 import { playerState } from "@/lib/net/playerState";
 import { useGameStore } from "@/lib/store/useGameStore";
+import { ALPHA_COLOUR, SEAT_COLOURS } from "@/lib/world/seatColours";
 
-/** One hue per seat, matching the craft they sit above. */
-const SEAT_COLOURS = [
-  "#5fe4ff",
-  "#ff7ad9",
-  "#9dff6b",
-  "#ffc247",
-  "#b98cff",
-  "#ff6b5f",
-  "#6bffd0",
-  "#ffffff",
-];
-
-const ALPHA_COLOUR = "#ffd24a";
 
 /**
  * A name over every craft, drawn once per seat onto a canvas.

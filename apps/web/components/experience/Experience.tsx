@@ -11,12 +11,16 @@ import Presence from "./Presence";
 import NetDebug from "./NetDebug";
 import Scoreboard from "./Scoreboard";
 import DraftHud from "./DraftHud";
+import ClipHud from "./ClipHud";
 import WorldScene from "./WorldScene";
 import PlayerGlider from "@/components/world/PlayerGlider";
 import RemoteGliders from "@/components/world/RemoteGliders";
 import PlayerLabels from "@/components/world/PlayerLabels";
 import RemoteTrails from "@/components/world/RemoteTrails";
 import EnergyCores from "@/components/world/EnergyCores";
+import ClipShards from "@/components/world/ClipShards";
+import ClipBursts from "@/components/world/ClipBursts";
+import SceneProbe from "./SceneProbe";
 import ControlsHint from "./ControlsHint";
 import SpeedLines from "./SpeedLines";
 import { generateFrostedGlassNormalTexture } from "@/lib/textures/frostedGlassNormal";
@@ -47,7 +51,12 @@ function Stage() {
       <RemoteTrails />
       {/* the reason to go anywhere */}
       <EnergyCores />
+      {/* and what is left of whoever lost a fight over one */}
+      <ClipShards />
+      <ClipBursts />
       <SpeedLines />
+      {/* development only: lets the scene graph be inspected from outside */}
+      <SceneProbe />
     </>
   );
 }
@@ -103,6 +112,7 @@ export default function Experience() {
       <Presence />
       <Scoreboard />
       <DraftHud />
+      <ClipHud />
       <NetDebug />
       <ControlsHint />
     </>

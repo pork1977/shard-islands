@@ -3,6 +3,7 @@ import {
   ROOM,
   SERVER_TICK_RATE_HZ,
   TRAIL,
+  CLIP,
   CORE_PICKUP_RADIUS,
   CORE_RESPAWN_MS,
   CORE_TRAIL_VALUE,
@@ -13,7 +14,13 @@ import {
   stepFlight,
   type FlightSim,
 } from "@shard-islands/shared";
-import { PlayerState, RoomState, TrailPoint } from "../schema/RoomState.js";
+import { ClipShard, PlayerState, RoomState, TrailPoint } from "../schema/RoomState.js";
+import {
+  buildTrailIndex,
+  createTrailIndex,
+  findCut,
+  type TrailIndex,
+} from "./tailClip.js";
 
 /** One frame of stick from a client, with the slice of time it applied to. */
 interface InputSample {
@@ -58,6 +65,26 @@ interface Runtime {
   simulating: boolean;
   /** When input last arrived, so a real silence can be told from jitter. */
   lastInputAt: number;
+  /**
+   * Where this tick's movement started, kept so collection and tail-clip can
+   * both be tested against the path FLOWN rather than the point landed on.
+   */
+  fromX: number;
+  fromY: number;
+  fromZ: number;
+  /** Chunked bounds over this player's trail, rebuilt once a tick. */
+  trailIndex: TrailIndex;
+  /** No cuts until this time, after being cut. */
+  immuneUntil: number;
+  /**
+   * Whether the last stick this player sent was holding station.
+   *
+   * Kept because coasting has to reproduce what the pilot last asked for.
+   * Hover was hard-coded false in the coast, so a player who parked to look
+   * around and then switched tabs had their craft quietly flown off by the
+   * room and came back somewhere else entirely.
+   */
+  hovering: boolean;
 }
 
 /**
@@ -83,6 +110,12 @@ const SILENCE_BEFORE_COAST_MS = 250;
 /** Ribbon length has to stay bounded, for the wire and for the renderer. */
 const MAX_TRAIL_LENGTH = 350;
 
+/** Server-side bookkeeping for one scattered shard. */
+interface ShardTiming {
+  armedAt: number;
+  diesAt: number;
+}
+
 /**
  * The shared sky.
  *
@@ -104,6 +137,10 @@ export class ShardIslandsRoom extends Room<RoomState> {
 
   /** When each collected core comes back, by index. 0 means it is out there. */
   private coreReturnsAt: number[] = [];
+
+  /** Arming and expiry for each live shard, keyed by its id. */
+  private shardTiming = new Map<number, ShardTiming>();
+  private nextShardId = 1;
 
   onCreate() {
     this.setState(new RoomState());
@@ -138,6 +175,7 @@ export class ShardIslandsRoom extends Room<RoomState> {
       rt.sim.pitch = data.pitch;
       rt.sim.speed = data.speed;
       rt.sim.draft = 1;
+      rt.hovering = false;
       rt.simulating = true;
       rt.pending.length = 0;
       rt.lastInputAt = Date.now();
@@ -199,6 +237,12 @@ export class ShardIslandsRoom extends Room<RoomState> {
       lastSeq: 0,
       simulating: false,
       lastInputAt: Date.now(),
+      fromX: 0,
+      fromY: 0,
+      fromZ: 0,
+      trailIndex: createTrailIndex(),
+      immuneUntil: 0,
+      hovering: false,
     });
 
     console.log(`[room] join ${client.sessionId} (${this.state.players.size} in room)`);
@@ -224,17 +268,19 @@ export class ShardIslandsRoom extends Room<RoomState> {
       const rt = this.runtime.get(id);
       if (!rt || !rt.simulating) return;
 
-      // Where this tick started. Collection is tested against the whole
-      // path flown, not just where the craft ended up.
-      const fromX = rt.sim.x;
-      const fromY = rt.sim.y;
-      const fromZ = rt.sim.z;
+      // Where this tick started. Both core collection and tail-clip are
+      // tested against the whole path flown, not just where the craft
+      // ended up.
+      rt.fromX = rt.sim.x;
+      rt.fromY = rt.sim.y;
+      rt.fromZ = rt.sim.z;
 
       let applied = 0;
       while (rt.pending.length > 0 && applied < MAX_SAMPLES_PER_TICK) {
         const sample = rt.pending.shift()!;
         stepFlight(rt.sim, sample, sample.dt);
         rt.lastSeq = sample.seq;
+        rt.hovering = sample.hover;
         applied++;
       }
 
@@ -254,18 +300,26 @@ export class ShardIslandsRoom extends Room<RoomState> {
             turn: rt.sim.smoothTurn,
             pitch: rt.sim.smoothPitch,
             boosting: rt.sim.boosting,
-            hover: false,
+            hover: rt.hovering,
           },
           1 / SERVER_TICK_RATE_HZ,
         );
       }
 
-      this.collectCores(player, rt, fromX, fromY, fromZ);
+      this.collectCores(player, rt, rt.fromX, rt.fromY, rt.fromZ);
+      this.collectShards(player, rt, now);
       this.publish(player, rt);
       this.appendTrail(player);
+
+      player.immuneMs = Math.max(0, Math.min(65535, rt.immuneUntil - now));
     });
 
+    // Everybody has moved and everybody's trail is up to date, so every cut
+    // this tick is judged against the same finished picture of the sky.
+    this.resolveClips(now);
+
     this.respawnCores(now);
+    this.expireShards(now);
   }
 
   private publish(player: PlayerState, rt: Runtime) {
@@ -437,6 +491,257 @@ export class ShardIslandsRoom extends Room<RoomState> {
         player.trailLength + CORE_TRAIL_VALUE,
       );
       player.cores += 1;
+    }
+  }
+
+  /**
+   * Tail-Clip: who cut whose trail this tick.
+   *
+   * The highest-stakes thing in the game, and therefore the thing that has
+   * to be decided in exactly one place. A client never predicts a cut, never
+   * plays the effect on its own authority, and never shortens anybody's
+   * ribbon locally — every viewer, including the victim, learns what
+   * happened from the same state, so nobody ever sees a kill that did not
+   * happen or misses one that did.
+   *
+   * Two gates decide whether a pass counts, and together they are what turns
+   * eight arbitrary colours into teams:
+   *
+   *   Your own colour cannot be cut. Somebody wearing your hue is a craft
+   *   you can fly wingtip to wingtip with at speed, and drafting them is
+   *   worth far more than drafting anyone else — so your own colour is the
+   *   company you want to keep.
+   *
+   *   You have to cut ACROSS the wake. Following it is drafting, and since
+   *   drafting sits you exactly on the line a cut is tested against, without
+   *   this the two mechanics could not both exist.
+   */
+  private resolveClips(now: number) {
+    // One index per player, built once. A clipper is tested against every
+    // other trail in the room, so building these per pair would rebuild the
+    // same bounds two dozen times a tick.
+    this.state.players.forEach((player, id) => {
+      const rt = this.runtime.get(id);
+      if (rt) buildTrailIndex(player.trail, rt.trailIndex);
+    });
+
+    // Gathered first and applied second, so every cut is judged against the
+    // sky as it stood at the end of the movement pass. Severing a trail
+    // while still looking for cuts would let the order players happen to be
+    // stored in decide who got away with what.
+    const cuts: {
+      victimId: string;
+      clipperId: string;
+      index: number;
+      x: number;
+      y: number;
+      z: number;
+    }[] = [];
+
+    this.state.players.forEach((clipper, clipperId) => {
+      const crt = this.runtime.get(clipperId);
+      if (!crt || !crt.simulating) return;
+
+      // You cut by flying THROUGH something. A craft holding station is not
+      // cutting anything, however it happens to be pointed — without this,
+      // parking across a lane turns a hovering craft into permanent razor
+      // wire that severs everyone who passes, which is both a griefing tool
+      // and completely illegible to the victim, who flew into a craft that
+      // was visibly doing nothing.
+      const mx = crt.sim.x - crt.fromX;
+      const my = crt.sim.y - crt.fromY;
+      const mz = crt.sim.z - crt.fromZ;
+      if (mx * mx + my * my + mz * mz < 0.04) return;
+
+      const cp = Math.cos(crt.sim.pitch);
+      const fx = cp * Math.cos(crt.sim.yaw);
+      const fy = cp * Math.sin(crt.sim.yaw);
+      const fz = Math.sin(crt.sim.pitch);
+
+      this.state.players.forEach((victim, victimId) => {
+        if (victimId === clipperId) return;
+        if (victim.colour === clipper.colour) return;
+
+        const vrt = this.runtime.get(victimId);
+        if (!vrt || !vrt.simulating) return;
+        if (now < vrt.immuneUntil) return;
+        // Nothing to cut off a craft that has barely started laying one.
+        if (victim.trail.length < 4) return;
+
+        const cut = findCut(
+          crt.fromX,
+          crt.fromY,
+          crt.fromZ,
+          crt.sim.x,
+          crt.sim.y,
+          crt.sim.z,
+          fx,
+          fy,
+          fz,
+          victim.trail,
+          vrt.trailIndex,
+        );
+        if (!cut) return;
+
+        cuts.push({
+          victimId,
+          clipperId,
+          index: cut.index,
+          x: cut.x,
+          y: cut.y,
+          z: cut.z,
+        });
+      });
+    });
+
+    for (const c of cuts) this.applyCut(c, now);
+  }
+
+  /**
+   * Sever one trail.
+   *
+   * Deliberately re-checks immunity: two players can cross the same trail in
+   * the same tick, and the second of them must not get a second cut out of a
+   * craft that has already been taken apart.
+   */
+  private applyCut(
+    c: {
+      victimId: string;
+      clipperId: string;
+      index: number;
+      x: number;
+      y: number;
+      z: number;
+    },
+    now: number,
+  ) {
+    const victim = this.state.players.get(c.victimId);
+    const vrt = this.runtime.get(c.victimId);
+    if (!victim || !vrt || now < vrt.immuneUntil) return;
+
+    // Everything from the tail up to the cut. One point always survives, so
+    // a craft is never left with no ribbon at all.
+    const lost = Math.min(c.index + 1, victim.trail.length - 1);
+    if (lost < 1) return;
+
+    // Scattered before the trail is shortened — the shards lie along the
+    // piece that was taken, which is what makes a kill readable from across
+    // the sky as a line of somebody else's colour hanging in the air.
+    this.scatterShards(victim, lost, now);
+
+    victim.trail.splice(0, lost);
+    victim.trailLength = Math.max(CLIP.minTrailLength, victim.trailLength - lost);
+
+    victim.clipsTaken += 1;
+    victim.clipX = c.x;
+    victim.clipY = c.y;
+    victim.clipZ = c.z;
+
+    vrt.immuneUntil = now + CLIP.immunityMs;
+    victim.immuneMs = CLIP.immunityMs;
+
+    const clipper = this.state.players.get(c.clipperId);
+    if (clipper) clipper.clipsMade += 1;
+
+    console.log(
+      `[room] clip P${(clipper?.seat ?? 0) + 1} cut P${victim.seat + 1} for ${lost}`,
+    );
+  }
+
+  /**
+   * Turn a severed tail into pickups.
+   *
+   * Only part of it comes back — the rest evaporates, because a clip that
+   * conserved every point would leave the room's total score untouched and
+   * make the whole mechanic a transfer rather than a stake.
+   *
+   * They arm after a delay. Without one the victim simply hoovers up their
+   * own tail on the spot and has lost nothing at all; with it, both craft
+   * are a good forty metres past the cut before anything is takeable, and
+   * both have to turn and come back for it. That turn is the fight.
+   */
+  private scatterShards(victim: PlayerState, lost: number, now: number) {
+    const total = Math.round(lost * CLIP.shardYield);
+    if (total < 1) return;
+
+    const count = Math.max(1, Math.min(CLIP.maxShards, Math.round(total / 4)));
+    const per = Math.max(1, Math.min(255, Math.floor(total / count)));
+
+    for (let n = 0; n < count; n++) {
+      const at = Math.min(lost - 1, Math.floor(((n + 0.5) / count) * lost));
+      const p = victim.trail[at];
+      if (!p) continue;
+
+      const shard = new ClipShard();
+      shard.id = this.nextShardId++;
+      // A little scatter, so a cut reads as debris rather than as a tidy
+      // dotted line where a trail used to be.
+      shard.x = p.x + (Math.random() - 0.5) * 6;
+      shard.y = p.y + (Math.random() - 0.5) * 6;
+      shard.z = p.z + (Math.random() - 0.5) * 6;
+      shard.value = per;
+      shard.colour = victim.colour;
+
+      this.state.shards.push(shard);
+      this.shardTiming.set(shard.id, {
+        armedAt: now + CLIP.shardArmMs,
+        diesAt: now + CLIP.shardLifeMs,
+      });
+    }
+  }
+
+  /**
+   * Shards picked up along this tick's path.
+   *
+   * Swept for the same reason core collection is: the craft that just cut
+   * somebody is travelling fast, and testing only where it ended up would
+   * let it fly straight through its own winnings.
+   */
+  private collectShards(player: PlayerState, rt: Runtime, now: number) {
+    const shards = this.state.shards;
+    if (shards.length === 0) return;
+
+    const r = CLIP.shardPickupRadius;
+    const rSq = r * r;
+
+    const px = rt.sim.x - rt.fromX;
+    const py = rt.sim.y - rt.fromY;
+    const pz = rt.sim.z - rt.fromZ;
+    const pathSq = px * px + py * py + pz * pz;
+
+    for (let i = shards.length - 1; i >= 0; i--) {
+      const shard = shards[i];
+      const timing = this.shardTiming.get(shard.id);
+      if (!timing || now < timing.armedAt) continue;
+
+      let t = 0;
+      if (pathSq > 1e-9) {
+        t =
+          ((shard.x - rt.fromX) * px +
+            (shard.y - rt.fromY) * py +
+            (shard.z - rt.fromZ) * pz) /
+          pathSq;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+      }
+      const dx = shard.x - (rt.fromX + px * t);
+      const dy = shard.y - (rt.fromY + py * t);
+      const dz = shard.z - (rt.fromZ + pz * t);
+      if (dx * dx + dy * dy + dz * dz > rSq) continue;
+
+      player.trailLength = Math.min(MAX_TRAIL_LENGTH, player.trailLength + shard.value);
+      this.shardTiming.delete(shard.id);
+      shards.splice(i, 1);
+    }
+  }
+
+  /** Shards nobody came back for. */
+  private expireShards(now: number) {
+    const shards = this.state.shards;
+    for (let i = shards.length - 1; i >= 0; i--) {
+      const timing = this.shardTiming.get(shards[i].id);
+      if (timing && now < timing.diesAt) continue;
+      this.shardTiming.delete(shards[i].id);
+      shards.splice(i, 1);
     }
   }
 

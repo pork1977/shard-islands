@@ -525,6 +525,154 @@ export function readCoresTaken(into: Uint8Array): Uint8Array {
   return into;
 }
 
+/** One piece of severed trail lying in the sky. */
+export interface ShardView {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  value: number;
+  colour: number;
+}
+
+/**
+ * The trail fragments a tail-clip left behind.
+ *
+ * Unlike the Energy Cores these cannot be derived from a seed — they appear
+ * wherever somebody lost a fight — so the room really does send their
+ * positions, and this simply reports what it sent. Nothing here is ever
+ * predicted: a shard the client invented would be a reward the player could
+ * see and never actually collect.
+ */
+export function readShards(into: ShardView[]): ShardView[] {
+  into.length = 0;
+
+  const shards = connection.room?.state?.shards as
+    | ArrayLike<ShardView>
+    | undefined;
+  if (!shards) return into;
+
+  for (let i = 0; i < shards.length; i++) {
+    const shard = shards[i];
+    into.push({
+      id: shard.id,
+      x: shard.x,
+      y: shard.y,
+      z: shard.z,
+      value: shard.value,
+      colour: shard.colour,
+    });
+  }
+  return into;
+}
+
+/** A trail coming apart, somewhere in the sky. */
+export interface ClipEvent {
+  x: number;
+  y: number;
+  z: number;
+  /** The victim's colour, so the burst is in the colour that was lost. */
+  colour: number;
+  seat: number;
+  /** Whether the player watching is the one who just lost their tail. */
+  self: boolean;
+}
+
+/**
+ * Cuts that have happened since this was last asked.
+ *
+ * Delivered as a counter on each player rather than as a message, and read
+ * by watching that counter change. The difference matters: a message is
+ * heard once, by whoever was connected at the time, and a client that
+ * dropped a packet simply never learns the trail was cut — so it goes on
+ * drawing a ribbon nobody else can see. A counter is state, and state is
+ * what every viewer eventually agrees on.
+ *
+ * Keyed by SESSION ID, and pruned every read.
+ *
+ * Keying by seat is the obvious choice — it is what the ribbons do — and it
+ * is wrong here, in a way that is invisible until you go looking. Seats are
+ * reused: when a player leaves having been cut three times, the next
+ * arrival in that seat starts at zero, their counter never climbs past the
+ * three still on record, and every cut they take is silently swallowed. It
+ * cost an afternoon to find, because the server was doing everything right
+ * and the sky simply stayed quiet.
+ *
+ * Ids are never reused, so there is no ambiguity; pruning what is no longer
+ * in the room is what stops the map growing forever.
+ *
+ * ONE consumer only: reading is what marks an event as delivered, so a
+ * second caller would silently take half of them. Anything else that needs
+ * to know about cuts watches the counters through readClipStanding.
+ */
+const lastClipCount = new Map<string, number>();
+
+export function readClipEvents(into: ClipEvent[]): ClipEvent[] {
+  into.length = 0;
+
+  const players = connection.room?.state?.players;
+  if (!players) return into;
+
+  const present = new Set<string>();
+
+  players.forEach(
+    (
+      player: {
+        seat: number;
+        colour: number;
+        clipsTaken: number;
+        clipX: number;
+        clipY: number;
+        clipZ: number;
+      },
+      id: string,
+    ) => {
+      present.add(id);
+      const seen = lastClipCount.get(id);
+      lastClipCount.set(id, player.clipsTaken);
+
+      // First sight of a player is not an event. Somebody cut before this
+      // client arrived should not have it replayed at them on join.
+      if (seen === undefined || player.clipsTaken <= seen) return;
+
+      into.push({
+        x: player.clipX,
+        y: player.clipY,
+        z: player.clipZ,
+        colour: player.colour,
+        seat: player.seat,
+        self: id === connection.selfId,
+      });
+    },
+  );
+
+  for (const id of lastClipCount.keys()) {
+    if (!present.has(id)) lastClipCount.delete(id);
+  }
+
+  return into;
+}
+
+/** Where this player stands in a fight, for the HUD. */
+export interface ClipStanding {
+  /** Milliseconds of protection left after being cut; 0 when exposed. */
+  immuneMs: number;
+  clipsMade: number;
+  clipsTaken: number;
+}
+
+export function readClipStanding(): ClipStanding | null {
+  const player = connection.room?.state?.players?.get(connection.selfId) as
+    | { immuneMs: number; clipsMade: number; clipsTaken: number }
+    | undefined;
+  if (!player) return null;
+  return {
+    immuneMs: player.immuneMs,
+    clipsMade: player.clipsMade,
+    clipsTaken: player.clipsTaken,
+  };
+}
+
 /** How many gliders are in the sky, including this one. */
 export function playerCount(): number {
   const room = connection.room;

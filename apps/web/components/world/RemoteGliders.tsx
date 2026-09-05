@@ -6,18 +6,8 @@ import * as THREE from "three";
 import { generateGlider } from "@/lib/world/generateGlider";
 import { ROOM } from "@shard-islands/shared";
 import { readRemotePlayers, type RemoteSnapshot } from "@/lib/net/connection";
+import { SEAT_COLOURS } from "@/lib/world/seatColours";
 
-/** One hue per seat, so two gliders are never the same colour. */
-const SEAT_COLOURS = [
-  "#5fe4ff",
-  "#ff7ad9",
-  "#9dff6b",
-  "#ffc247",
-  "#b98cff",
-  "#ff6b5f",
-  "#6bffd0",
-  "#ffffff",
-];
 
 const UP = new THREE.Vector3(0, 0, 1);
 

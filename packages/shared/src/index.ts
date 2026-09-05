@@ -7,3 +7,4 @@ export * from "./types";
 export * from "./terrain";
 export * from "./flight";
 export * from "./cores";
+export * from "./geometry";
