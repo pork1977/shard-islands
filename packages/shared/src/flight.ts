@@ -59,6 +59,14 @@ export interface FlightSim {
   boosting: boolean;
   smoothTurn: number;
   smoothPitch: number;
+  /**
+   * Speed multiplier from riding somebody's slipstream; 1 when not drafting.
+   *
+   * Set by the room, carried in the synced state, and part of the sim rather
+   * than an input, because the client has to replay with the same value the
+   * server used or every drafted second becomes a correction.
+   */
+  draft: number;
 }
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
@@ -80,6 +88,7 @@ export function createFlightSim(
     boosting: false,
     smoothTurn: 0,
     smoothPitch: 0,
+    draft: 1,
   };
 }
 
@@ -94,6 +103,7 @@ export function copyFlightSim(from: FlightSim, into: FlightSim): FlightSim {
   into.boosting = from.boosting;
   into.smoothTurn = from.smoothTurn;
   into.smoothPitch = from.smoothPitch;
+  into.draft = from.draft;
   return into;
 }
 
@@ -143,11 +153,15 @@ export function stepFlight(s: FlightSim, input: FlightInput, dt: number): void {
   // diving gains speed, climbing bleeds it
   const dive = Math.max(0, -Math.sin(s.pitch));
   const climb = Math.max(0, Math.sin(s.pitch));
+  // Draft stacks with boost rather than replacing it: the slipstream is a
+  // reward for holding a hard line behind somebody, and it should be worth
+  // taking whether or not you are also on the throttle.
   const target = hovering
     ? 0
     : FLIGHT.baseForwardSpeed *
       (1 + dive * (FLIGHT.diveSpeedMultiplier - 1) - climb * 0.35) *
-      (input.boosting ? FLIGHT.boostSpeedMultiplier : 1);
+      (input.boosting ? FLIGHT.boostSpeedMultiplier : 1) *
+      (s.draft > 0 ? s.draft : 1);
   // Boost engages hard and bleeds off gently. Ramping in at the same slow
   // rate it decays at is what made shift feel like nothing was happening.
   const responsiveness = target > s.speed ? 5.5 : 1.6;

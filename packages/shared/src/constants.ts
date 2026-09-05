@@ -23,8 +23,34 @@ export const TRAIL = {
   baseThickness: 0.4,
 } as const;
 
+/**
+ * Jetstream Draft.
+ *
+ * Two tiers rather than the flat colour gate first sketched. A hard "only
+ * your own colour may draft" rule is dead weight in the rooms this will
+ * actually launch in: with eight colours and two players in the sky, the
+ * mechanic would almost never be available at all. Grading it keeps the
+ * intent — you go and look for your own kind, because that is where the real
+ * boost is — while leaving something worth doing behind a stranger.
+ */
+export const DRAFT = {
+  /** Behind anybody's trail. */
+  strangerMultiplier: 1.25,
+  /** Behind a craft of your own colour. */
+  alliedMultiplier: 1.65,
+  /** How closely the drafter has to be following the trail's own direction. */
+  minHeadingAgreement: 0.55,
+  /** Trail points back from the leader that still pull. */
+  hotPoints: 34,
+} as const;
+
 export const INTERACTION_RADII = {
-  draftLateral: 3,
+  /**
+   * Raised from 3. At three metres, catching a slipstream at fifty metres a
+   * second was threading a needle nobody threaded; the fantasy is sitting in
+   * somebody's wake, not landing a precision shot.
+   */
+  draftLateral: 7,
   tailClip: 0.6, // added to trail thickness/2 for the capsule test
   barrelRoll: 12,
   crystalVoidEvent: 40,

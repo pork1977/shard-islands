@@ -6,6 +6,8 @@ import {
   CORE_PICKUP_RADIUS,
   CORE_RESPAWN_MS,
   CORE_TRAIL_VALUE,
+  DRAFT,
+  INTERACTION_RADII,
   coreSites,
   createFlightSim,
   stepFlight,
@@ -135,6 +137,7 @@ export class ShardIslandsRoom extends Room<RoomState> {
       rt.sim = createFlightSim(data.x, data.y, data.z, data.yaw);
       rt.sim.pitch = data.pitch;
       rt.sim.speed = data.speed;
+      rt.sim.draft = 1;
       rt.simulating = true;
       rt.pending.length = 0;
       rt.lastInputAt = Date.now();
@@ -211,6 +214,12 @@ export class ShardIslandsRoom extends Room<RoomState> {
     this.state.tick++;
     const now = Date.now();
 
+    // Resolved for the whole room BEFORE anybody is stepped, so drafting is
+    // decided against one consistent picture of where everyone was. Doing it
+    // inside the per-player loop would let the players simulated first be
+    // judged against last tick's trails and the rest against this tick's.
+    this.resolveDrafting();
+
     this.state.players.forEach((player, id) => {
       const rt = this.runtime.get(id);
       if (!rt || !rt.simulating) return;
@@ -264,7 +273,90 @@ export class ShardIslandsRoom extends Room<RoomState> {
     player.boosting = rt.sim.boosting;
     player.smoothTurn = rt.sim.smoothTurn;
     player.smoothPitch = rt.sim.smoothPitch;
+    player.draft = rt.sim.draft;
     player.lastSeq = rt.lastSeq;
+  }
+
+  /**
+   * Who is sitting in whose slipstream.
+   *
+   * A draft counts when a player is close to another player's recent trail
+   * AND travelling along it — crossing somebody's wake at right angles is
+   * not drafting, and without the heading test it would be the easiest way
+   * in the game to get a free boost. The trail is the authoritative one the
+   * room appends, so this is judged against the same geometry every client
+   * can see.
+   *
+   * Own colour is worth far more than a stranger's. That is the team pull:
+   * anybody's wake will do, but you go looking for your own kind.
+   */
+  private resolveDrafting() {
+    const lateral = INTERACTION_RADII.draftLateral;
+    const lateralSq = lateral * lateral;
+
+    this.state.players.forEach((player, id) => {
+      const rt = this.runtime.get(id);
+      if (!rt || !rt.simulating) {
+        player.draft = 1;
+        return;
+      }
+
+      // Heading of the drafter, for the along-the-wake test.
+      const cp = Math.cos(rt.sim.pitch);
+      const fx = cp * Math.cos(rt.sim.yaw);
+      const fy = cp * Math.sin(rt.sim.yaw);
+      const fz = Math.sin(rt.sim.pitch);
+
+      let best = 1;
+
+      this.state.players.forEach((leader, leaderId) => {
+        if (leaderId === id) return;
+        const trail = leader.trail;
+        if (!trail || trail.length < 2) return;
+
+        const multiplier =
+          leader.colour === player.colour
+            ? DRAFT.alliedMultiplier
+            : DRAFT.strangerMultiplier;
+        if (multiplier <= best) return; // cannot improve on what we have
+
+        // Only the freshest part of the wake pulls. An hour-old trail
+        // draped across the map should not tow anybody.
+        const from = Math.max(0, trail.length - DRAFT.hotPoints);
+        for (let i = from; i < trail.length - 1; i++) {
+          const a = trail[i];
+          const b = trail[i + 1];
+
+          const sx = b.x - a.x;
+          const sy = b.y - a.y;
+          const sz = b.z - a.z;
+          const lenSq = sx * sx + sy * sy + sz * sz;
+          if (lenSq < 1e-6) continue;
+
+          // closest point on this segment to the drafter
+          let t =
+            ((rt.sim.x - a.x) * sx + (rt.sim.y - a.y) * sy + (rt.sim.z - a.z) * sz) /
+            lenSq;
+          t = t < 0 ? 0 : t > 1 ? 1 : t;
+
+          const dx = rt.sim.x - (a.x + sx * t);
+          const dy = rt.sim.y - (a.y + sy * t);
+          const dz = rt.sim.z - (a.z + sz * t);
+          if (dx * dx + dy * dy + dz * dz > lateralSq) continue;
+
+          // and travelling the way the wake runs
+          const inv = 1 / Math.sqrt(lenSq);
+          const agreement = (fx * sx + fy * sy + fz * sz) * inv;
+          if (agreement < DRAFT.minHeadingAgreement) continue;
+
+          best = multiplier;
+          break;
+        }
+      });
+
+      rt.sim.draft = best;
+      player.draft = best;
+    });
   }
 
   /**

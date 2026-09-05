@@ -10,6 +10,7 @@ import FallHud from "./FallHud";
 import Presence from "./Presence";
 import NetDebug from "./NetDebug";
 import Scoreboard from "./Scoreboard";
+import DraftHud from "./DraftHud";
 import WorldScene from "./WorldScene";
 import PlayerGlider from "@/components/world/PlayerGlider";
 import RemoteGliders from "@/components/world/RemoteGliders";
@@ -81,6 +82,7 @@ export default function Experience() {
       <FallHud />
       <Presence />
       <Scoreboard />
+      <DraftHud />
       <NetDebug />
       <ControlsHint />
     </>

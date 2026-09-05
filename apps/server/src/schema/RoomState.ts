@@ -34,6 +34,13 @@ export class PlayerState extends Schema {
   /** Cores collected this session, purely so the player can see the count. */
   @type("uint16") cores = 0;
 
+  /**
+   * Slipstream multiplier in effect, 1 when not drafting. Synced because the
+   * owning client replays its own inputs against it, and everyone else uses
+   * it to decide whether to draw the drafting effect on that craft.
+   */
+  @type("float32") draft = 1;
+
   /** Hue index into the client's palette, so players are told apart. */
   @type("uint8") colour = 0;
 

@@ -48,6 +48,8 @@ export interface SelfSnapshot {
   lastSeq: number;
   /** Earned server-side, so the local ribbon grows with the score. */
   trailLength: number;
+  /** Slipstream multiplier the room has us on. */
+  draft: number;
 }
 
 /**
@@ -63,6 +65,10 @@ const CORRECTION_TAU = 0.12;
 
 export const prediction = {
   sim: createFlightSim(),
+  /** Whatever slipstream we are in, for the indicator. 1 is none. */
+  get draft() {
+    return prediction.sim.draft;
+  },
   /** Inputs the server has not acknowledged yet, oldest first. */
   history: [] as InputSample[],
   /** Samples not yet flushed to the wire. */
@@ -176,6 +182,9 @@ export function reconcile(snapshot: SelfSnapshot) {
   sim.boosting = snapshot.boosting;
   sim.smoothTurn = snapshot.smoothTurn;
   sim.smoothPitch = snapshot.smoothPitch;
+  // Drafting is the room's call, so it arrives with the rest of the state and
+  // the replay below runs against the same multiplier the server used.
+  sim.draft = snapshot.draft > 0 ? snapshot.draft : 1;
   if (snapshot.trailLength > 0) playerState.trailLength = snapshot.trailLength;
 
   let kept = 0;
