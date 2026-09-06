@@ -156,11 +156,22 @@ async function main() {
 
     // Join in small parallel batches: one at a time is far too slow at this
     // scale, all at once trips the matchmaker.
-    while (bots.length < wanted) {
+    // A refused join never increases the count, so without this the loop
+    // spins until something kills it. Being turned away is now an expected
+    // outcome rather than a failure — it is the capacity gate working — so
+    // it ends the stage and gets reported.
+    let emptyBatches = 0;
+    while (bots.length < wanted && emptyBatches < 2) {
       const batch = Math.min(8, wanted - bots.length);
       const joined = await Promise.all(
         Array.from({ length: batch }, () => join().catch(() => null)),
       );
+      if (joined.every((room) => room === null)) {
+        emptyBatches++;
+        await sleep(300);
+        continue;
+      }
+      emptyBatches = 0;
       for (const room of joined) {
         if (!room) continue;
         const i = bots.length;
@@ -177,6 +188,12 @@ async function main() {
         bots.push(room);
       }
       await sleep(120);
+    }
+
+    if (bots.length < wanted) {
+      console.log(
+        `  (turned away at ${bots.length} craft — the capacity gate is holding)`,
+      );
     }
 
     const live = watchers(bots);
