@@ -15,6 +15,7 @@ import ClipHud from "./ClipHud";
 import BeaconHud from "./BeaconHud";
 import RollHud from "./RollHud";
 import HowToPlay from "./HowToPlay";
+import ShareScore from "./ShareScore";
 import WorldScene from "./WorldScene";
 import PlayerGlider from "@/components/world/PlayerGlider";
 import RemoteGliders from "@/components/world/RemoteGliders";
@@ -117,6 +118,8 @@ export default function Experience() {
       {/* a question mark for the people who want one, and nothing for the
           people who do not */}
       <HowToPlay />
+      {/* only once there is a number worth boasting about */}
+      <ShareScore />
       <NetDebug />
       <ControlsHint />
     </>

@@ -68,20 +68,30 @@ export default function HowToPlay() {
         style={{
           position: "fixed",
           right: 18,
-          bottom: 148,
-          width: 30,
-          height: 30,
-          borderRadius: 15,
+          // Clear of the control legend, which sits at bottom 16 and grew
+          // taller when the barrel roll was added — the mark ended up
+          // behind it, which is a poor showing for the one thing on screen
+          // whose entire job is to be found.
+          bottom: 186,
+          // And above it in the stack, so no future row can bury it again.
+          zIndex: 20,
+          width: 34,
+          height: 34,
+          borderRadius: 17,
           cursor: "pointer",
           display: "grid",
           placeItems: "center",
           fontFamily:
             "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
-          fontSize: 14,
+          fontSize: 16,
           fontWeight: 700,
-          color: "#fff",
-          background: open ? "rgba(120,190,255,0.35)" : "rgba(12,20,32,0.42)",
-          border: "1px solid rgba(255,255,255,0.28)",
+          color: "#eaf6ff",
+          background: open
+            ? "rgba(120,190,255,0.45)"
+            : "rgba(38,74,112,0.72)",
+          border: "1px solid rgba(170,220,255,0.65)",
+          boxShadow: "0 0 14px rgba(90,170,255,0.35)",
+          textShadow: "0 1px 6px rgba(0,0,0,0.6)",
           backdropFilter: "blur(6px)",
           WebkitBackdropFilter: "blur(6px)",
           animation: firstVisit ? "shardHelpPulse 2.4s ease-in-out 3" : undefined,

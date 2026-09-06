@@ -78,7 +78,11 @@ export default function BeaconHud() {
               color: "rgba(255,225,160,0.85)",
             }}
           >
-            first one there takes it · {(b.phaseMsLeft / 1000).toFixed(1)}s
+            {/* Says WHERE. "First one there" assumes you know where there
+                is, and the core hangs well above the dome rather than in
+                it — people were flying into the dome and wondering why
+                nothing happened. */}
+            first to the core above the dome · {(b.phaseMsLeft / 1000).toFixed(1)}s
           </div>
         </>
       )}

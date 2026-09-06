@@ -38,6 +38,7 @@ export default function Monolith() {
   const coreShellRef = useRef<THREE.Mesh>(null);
   const coreHaloRef = useRef<THREE.Mesh>(null);
   const spikesRef = useRef<THREE.InstancedMesh>(null);
+  const pillarRef = useRef<THREE.Mesh>(null);
 
   /**
    * The spikes, as one instanced mesh.
@@ -191,6 +192,24 @@ export default function Monolith() {
       });
     }
 
+    // A column of light standing on the dome, only while it is open.
+    //
+    // The core hangs a good forty metres ABOVE the dome, and nothing said
+    // so: players flew into the dome itself, which is the large obvious
+    // object, and nothing happened. A dome is a place; a pillar is an
+    // instruction. It points at the thing you are supposed to reach and it
+    // reads from anywhere on the map, which is the whole reason the event
+    // lives on this object.
+    if (pillarRef.current) {
+      pillarRef.current.visible = open;
+      if (open) {
+        const flare = 0.75 + beat * 0.45;
+        pillarRef.current.scale.set(flare, 1, flare);
+        (pillarRef.current.material as THREE.MeshBasicMaterial).opacity =
+          0.16 + beat * 0.16;
+      }
+    }
+
     // The core itself, which is the thing to actually fly at.
     if (coreRef.current) {
       coreRef.current.visible = open;
@@ -279,13 +298,38 @@ export default function Monolith() {
         the claim radius the server actually uses, so what the player aims
         at and what the room measures are the same thing.
       */}
+      {/*
+        Stands from the dome up past the core and on into the sky, so the
+        core reads as the bright point ON something rather than as a speck
+        floating near a big building.
+      */}
+      <mesh
+        ref={pillarRef}
+        position={[0, 0, (site.coreZ - (site.groundZ - 6)) * 0.5 + 40]}
+        rotation={[Math.PI / 2, 0, 0]}
+        visible={false}
+      >
+        <cylinderGeometry
+          args={[26, 42, site.coreZ - (site.groundZ - 6) + 200, 30, 1, true]}
+        />
+        <meshBasicMaterial
+          color="#fff0c4"
+          transparent
+          opacity={0.18}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+          blending={THREE.AdditiveBlending}
+          toneMapped={false}
+        />
+      </mesh>
+
       <group ref={coreRef} position={[0, 0, site.coreZ - (site.groundZ - 6)]} visible={false}>
         <mesh ref={coreShellRef}>
-          <icosahedronGeometry args={[9, 1]} />
+          <icosahedronGeometry args={[13, 1]} />
           <meshBasicMaterial color="#ffffff" toneMapped={false} />
         </mesh>
         <mesh>
-          <icosahedronGeometry args={[15, 0]} />
+          <icosahedronGeometry args={[21, 0]} />
           <meshBasicMaterial
             color="#ffe9b0"
             transparent
