@@ -74,7 +74,7 @@ I built this one for you lot, genuinely. No waitlist, no sign-up, no "book a dem
 • Double-tap A or D for a barrel roll that shoves everyone near you away and makes you briefly uncuttable
 • The spiked dome charges up and then opens. First one to the core floating above it gets 20 seconds where their trail cuts anyone who touches it
 
-Longest trail wins. That's the whole game.
+Longest trail wins. There is no round timer and no end screen — it is king-of-the-hill, so you drop in, take the top spot off whoever has it, and leave when you feel like it. Your own best runs are saved in your browser, so there is something to come back and beat.
 
 **Under the hood:** Next.js + React Three Fiber on the front, a Colyseus server on Fly.io running authoritative physics at 20 ticks a second, with client-side prediction and reconciliation so it feels instant even from the other side of the planet. Both halves run the identical physics code out of a shared package, which is the only reason the prediction lines up.
 

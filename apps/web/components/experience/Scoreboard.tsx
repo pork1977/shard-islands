@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { readRoster, type RosterEntry } from "@/lib/net/connection";
 import { useGameStore } from "@/lib/store/useGameStore";
+import { readBests, recordScore } from "@/lib/world/personalBest";
 import { SEAT_COLOURS } from "@/lib/world/seatColours";
 
 /**
@@ -21,12 +22,21 @@ import { SEAT_COLOURS } from "@/lib/world/seatColours";
 export default function Scoreboard() {
   const phase = useGameStore((s) => s.phase);
   const [rows, setRows] = useState<RosterEntry[]>([]);
+  const [bests, setBests] = useState<number[]>([]);
 
   useEffect(() => {
     const scratch: RosterEntry[] = [];
     const poll = setInterval(() => {
       // copied out, because the reader reuses its array every call
-      setRows(readRoster(scratch).slice(0, 5).map((r) => ({ ...r })));
+      const roster = readRoster(scratch);
+      setRows(roster.slice(0, 5).map((r) => ({ ...r })));
+
+      // Offered every poll rather than at some ending, because there is
+      // no ending — the game never stops and a tab can close at any
+      // moment. recordScore only writes when the board would change.
+      const mine = roster.find((r) => r.self);
+      if (mine) recordScore(mine.trailLength);
+      setBests(readBests());
     }, 350);
     return () => clearInterval(poll);
   }, []);
@@ -93,6 +103,44 @@ export default function Scoreboard() {
           </span>
         </div>
       ))}
+
+      {bests.length > 0 && (
+        <div
+          style={{
+            marginTop: 9,
+            paddingTop: 7,
+            borderTop: "1px solid rgba(255,255,255,0.14)",
+            textAlign: "right",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              letterSpacing: 2.8,
+              textTransform: "uppercase",
+              color: "rgba(255,255,255,0.34)",
+              marginBottom: 3,
+            }}
+          >
+            your best
+          </div>
+          {bests.map((score, i) => (
+            <div
+              key={i}
+              style={{
+                fontSize: 13,
+                lineHeight: 1.6,
+                fontVariantNumeric: "tabular-nums",
+                // The top one is the number to beat; the other two are
+                // there to show it is a board and not a fluke.
+                color: i === 0 ? "rgba(255,255,255,0.72)" : "rgba(255,255,255,0.38)",
+              }}
+            >
+              {score}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
