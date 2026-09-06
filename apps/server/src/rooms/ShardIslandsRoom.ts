@@ -4,6 +4,10 @@ import {
   ROLL,
   SKY_FULL,
   SPAWN,
+  PLUMAGE_FORMS,
+  PLUMAGE_NAMES,
+  PLUMAGE_NODE,
+  plumageSites,
   SERVER_TICK_RATE_HZ,
   TRAIL,
   BEACON,
@@ -211,6 +215,9 @@ export class ShardIslandsRoom extends Room<RoomState> {
   /** When each collected core comes back, by index. 0 means it is out there. */
   private coreReturnsAt: number[] = [];
 
+  /** The same, for the rare nodes. */
+  private plumageReturnsAt: number[] = [];
+
   /** Arming and expiry for each live shard, keyed by its id. */
   private shardTiming = new Map<number, ShardTiming>();
   private nextShardId = 1;
@@ -244,6 +251,10 @@ export class ShardIslandsRoom extends Room<RoomState> {
     const sites = coreSites();
     this.coreReturnsAt = new Array(sites.length).fill(0);
     for (let i = 0; i < sites.length; i++) this.state.coresTaken.push(false);
+
+    const rare = plumageSites();
+    this.plumageReturnsAt = new Array(rare.length).fill(0);
+    for (let i = 0; i < rare.length; i++) this.state.plumageTaken.push(false);
 
     this.onMessage("descent", (client, data: DescentMessage) => {
       const player = this.state.players.get(client.sessionId);
@@ -444,6 +455,7 @@ export class ShardIslandsRoom extends Room<RoomState> {
       if (!wasRolling && rt.sim.rollSpin > 0) this.fireShockwave(player, rt, now);
 
       this.collectCores(player, rt, rt.fromX, rt.fromY, rt.fromZ);
+      this.collectPlumage(player, rt, rt.fromX, rt.fromY, rt.fromZ);
       this.collectShards(player, rt, now);
       this.claimBeacon(player, rt, now);
       this.publish(player, rt);
@@ -457,6 +469,7 @@ export class ShardIslandsRoom extends Room<RoomState> {
     this.resolveClips(now);
 
     this.respawnCores(now);
+    this.respawnPlumage(now);
     this.expireShards(now);
     this.reapAbandoned(now);
     this.stepBeacon(now, tickSeconds);
@@ -1199,6 +1212,78 @@ export class ShardIslandsRoom extends Room<RoomState> {
   }
 
   /** Cores come back, so an emptied sky refills for whoever arrives next. */
+  /**
+   * Taking a rare node, and becoming something.
+   *
+   * Swept along the tick's path exactly as the cores are, and for the same
+   * hard-won reason: testing only where the craft ended up let a boosted
+   * dive pass clean through a pickup it was aimed straight at. That failure
+   * is worse here — a core comes back in twenty-two seconds and one of
+   * these takes two and a half minutes.
+   *
+   * THE FORM IS ROLLED HERE, on the server, and never on the client. A
+   * client-side roll is how the Beacon ended up in a different place for
+   * every player: everyone would see the same craft wearing a different
+   * body, and nobody would be able to talk about it.
+   *
+   * Taken once and kept. It is not lost to a clip, it does not expire, and
+   * a player who already has one cannot take another — the node is a
+   * transformation, not a currency, and letting somebody hoard all four
+   * would empty the sky of the only thing worth crossing it for.
+   */
+  private collectPlumage(
+    player: PlayerState,
+    rt: Runtime,
+    fromX: number,
+    fromY: number,
+    fromZ: number,
+  ) {
+    if (player.plumage !== 0) return;
+
+    const sites = plumageSites();
+    const radiusSq = PLUMAGE_NODE.pickupRadius * PLUMAGE_NODE.pickupRadius;
+
+    const px = rt.sim.x - fromX;
+    const py = rt.sim.y - fromY;
+    const pz = rt.sim.z - fromZ;
+    const pathSq = px * px + py * py + pz * pz;
+
+    for (let i = 0; i < sites.length; i++) {
+      if (this.state.plumageTaken[i]) continue;
+      const site = sites[i];
+
+      let t = 0;
+      if (pathSq > 1e-9) {
+        t =
+          ((site.x - fromX) * px + (site.y - fromY) * py + (site.z - fromZ) * pz) /
+          pathSq;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+      }
+      const dx = site.x - (fromX + px * t);
+      const dy = site.y - (fromY + py * t);
+      const dz = site.z - (fromZ + pz * t);
+      if (dx * dx + dy * dy + dz * dz > radiusSq) continue;
+
+      this.state.plumageTaken[i] = true;
+      this.plumageReturnsAt[i] = Date.now() + PLUMAGE_NODE.respawnMs;
+      player.plumage =
+        PLUMAGE_FORMS[Math.floor(Math.random() * PLUMAGE_FORMS.length)];
+      console.log(
+        `[room] ${player.id} became ${PLUMAGE_NAMES[player.plumage] ?? player.plumage}`,
+      );
+      return; // one is one
+    }
+  }
+
+  private respawnPlumage(now: number) {
+    for (let i = 0; i < this.plumageReturnsAt.length; i++) {
+      if (!this.state.plumageTaken[i]) continue;
+      if (now < this.plumageReturnsAt[i]) continue;
+      this.state.plumageTaken[i] = false;
+      this.plumageReturnsAt[i] = 0;
+    }
+  }
+
   private respawnCores(now: number) {
     for (let i = 0; i < this.coreReturnsAt.length; i++) {
       const due = this.coreReturnsAt[i];

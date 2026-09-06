@@ -93,6 +93,17 @@ export class PlayerState extends Schema {
   @type("uint8") colour = 0;
 
   /**
+   * Which rare form this craft is wearing, 0 for none.
+   *
+   * Separate from `colour` on purpose and permanently. Colour is the
+   * rulebook — it decides who can cut whom and how hard a slipstream pulls
+   * — so it cannot be a cosmetic. This can be, because nothing reads it but
+   * the renderer. Set once when a node is taken and never cleared: it
+   * survives being cut, and it lasts as long as the session does.
+   */
+  @type("uint8") plumage = 0;
+
+  /**
    * Times this player has been cut, and where the last cut happened.
    *
    * The counter is the event: clients watch it for a change and play the
@@ -209,6 +220,15 @@ export class RoomState extends Schema {
    * which is a single boolean per pickup.
    */
   @type(["boolean"]) coresTaken = new ArraySchema<boolean>();
+
+  /**
+   * Which rare nodes are currently gone, by index into plumageSites().
+   *
+   * Same shape as coresTaken and for the same reason: positions are never
+   * sent, because both sides build the identical layout from the shared
+   * seed. Only the taken/not-taken flag has to cross the wire.
+   */
+  @type(["boolean"]) plumageTaken = new ArraySchema<boolean>();
 
   /**
    * Trail fragments scattered by tail-clips, and collectible by anyone.

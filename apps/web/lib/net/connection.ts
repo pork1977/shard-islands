@@ -41,6 +41,8 @@ export interface RemoteSnapshot {
   roll: number;
   colour: number;
   seat: number;
+  /** Rare form, 0 for an ordinary craft. Cosmetic only — see plumage.ts. */
+  plumage: number;
 }
 
 /** A line on the scoreboard. */
@@ -52,6 +54,8 @@ export interface RosterEntry {
   self: boolean;
   /** Longest trail in the room wears the crown. */
   alpha: boolean;
+  /** Rare form, 0 for none. */
+  plumage: number;
 }
 
 interface Connection {
@@ -360,6 +364,7 @@ interface TimedSample {
 interface RemoteBuffer {
   colour: number;
   seat: number;
+  plumage: number;
   samples: TimedSample[];
 }
 
@@ -403,11 +408,12 @@ function sampleRemotes(nowMs: number) {
     seen.add(id);
     let buffer = remoteBuffers.get(id);
     if (!buffer) {
-      buffer = { colour: player.colour, seat: player.seat, samples: [] };
+      buffer = { colour: player.colour, seat: player.seat, plumage: player.plumage ?? 0, samples: [] };
       remoteBuffers.set(id, buffer);
     }
     buffer.colour = player.colour;
     buffer.seat = player.seat;
+    buffer.plumage = player.plumage ?? 0;
 
     const last = buffer.samples[buffer.samples.length - 1];
     if (
@@ -494,6 +500,7 @@ export function readRemotePlayers(
         roll: held.roll,
         colour: buffer.colour,
         seat: buffer.seat,
+        plumage: buffer.plumage,
       });
       return;
     }
@@ -511,6 +518,7 @@ export function readRemotePlayers(
       roll: lerpAngle(older.roll, newer.roll, t),
       colour: buffer.colour,
       seat: buffer.seat,
+      plumage: buffer.plumage,
     });
   });
 
@@ -543,6 +551,7 @@ export function readRoster(into: RosterEntry[]): RosterEntry[] {
         id,
         seat: player.seat,
         colour: player.colour,
+        plumage: (player as { plumage?: number }).plumage ?? 0,
         trailLength: Math.round(player.trailLength),
         self: id === connection.selfId,
         alpha: false,
@@ -615,6 +624,38 @@ export function readTrailForSeat(seat: number, nowMs: number): number[] {
  * shared seed, so the room never sends a position. Written into a caller's
  * array to keep this allocation-free on the frame path.
  */
+/**
+ * The rare form this player is wearing, 0 for none.
+ *
+ * Read off the synced state rather than kept locally: the server rolls it,
+ * and a client that decided for itself would be a craft everybody else saw
+ * as something different.
+ */
+export function readOwnPlumage(): number {
+  const room = connection.room;
+  if (!room?.state?.players) return 0;
+  const me = room.state.players.get(connection.selfId) as
+    | { plumage?: number }
+    | undefined;
+  return me?.plumage ?? 0;
+}
+
+export function readPlumageTaken(into: Uint8Array): Uint8Array {
+  const room = connection.room;
+  const taken = room?.state?.plumageTaken as ArrayLike<boolean> | undefined;
+
+  // Offline or still joining: show them all. The world is worth looking at
+  // either way, and a solo flight with no rare nodes in it is a poorer sky.
+  if (!taken) {
+    into.fill(0);
+    return into;
+  }
+
+  const count = Math.min(into.length, taken.length);
+  for (let i = 0; i < count; i++) into[i] = taken[i] ? 1 : 0;
+  return into;
+}
+
 export function readCoresTaken(into: Uint8Array): Uint8Array {
   const room = connection.room;
   const taken = room?.state?.coresTaken as ArrayLike<boolean> | undefined;

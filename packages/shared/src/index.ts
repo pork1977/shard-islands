@@ -9,3 +9,4 @@ export * from "./flight";
 export * from "./cores";
 export * from "./geometry";
 export * from "./beacon";
+export * from "./plumage";

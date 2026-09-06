@@ -23,6 +23,7 @@ import RemoteGliders from "@/components/world/RemoteGliders";
 import PlayerLabels from "@/components/world/PlayerLabels";
 import RemoteTrails from "@/components/world/RemoteTrails";
 import EnergyCores from "@/components/world/EnergyCores";
+import PlumageNodes from "../world/PlumageNodes";
 import ClipShards from "@/components/world/ClipShards";
 import ClipBursts from "@/components/world/ClipBursts";
 import Shockwaves from "@/components/world/Shockwaves";
@@ -58,6 +59,7 @@ function Stage() {
       <RemoteTrails />
       {/* the reason to go anywhere */}
       <EnergyCores />
+      <PlumageNodes />
       {/* and what is left of whoever lost a fight over one */}
       <ClipShards />
       <ClipBursts />

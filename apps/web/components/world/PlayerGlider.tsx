@@ -6,7 +6,13 @@ import * as THREE from "three";
 import { generateGlider } from "@/lib/world/generateGlider";
 import { GliderCraftMaterial } from "@/lib/shaders/gliderCraft";
 import { takeRoll, useFlightControls } from "@/components/controllers/useFlightControls";
-import { flushInputs, readBeacon, readSelfSnapshot } from "@/lib/net/connection";
+import {
+  flushInputs,
+  readBeacon,
+  readOwnPlumage,
+  readSelfSnapshot,
+} from "@/lib/net/connection";
+import { lookOf } from "@/lib/world/plumageLook";
 import { playerState, pushTrailPoint } from "@/lib/net/playerState";
 import { predictStep, reconcile } from "@/lib/net/prediction";
 import TrailRibbon from "./TrailRibbon";
@@ -29,6 +35,9 @@ declare module "@react-three/fiber" {
 /** This world's up axis. The glass floor was looked down through along -Z. */
 const UP = new THREE.Vector3(0, 0, 1);
 
+/** What the craft goes back to, and starts as. Matches gliderCraft.ts. */
+const DEFAULT_CRAFT = { hull: "#0b0a1f", edge: "#7ff0ff", core: "#2bd6ff" };
+
 export default function PlayerGlider() {
   const geometry = useMemo(() => generateGlider(), []);
   const groupRef = useRef<THREE.Group>(null);
@@ -44,6 +53,8 @@ export default function PlayerGlider() {
   const lookAt = useMemo(() => new THREE.Vector3(), []);
   const boom = useMemo(() => new THREE.Vector3(), []);
   const zoomShown = useRef(1);
+  /** Rare form currently applied, so the uniforms are set on change only. */
+  const wornRef = useRef(-1);
   /** Last acknowledged input, so a snapshot is reconciled once, not per frame. */
   const lastAck = useRef(-1);
   /** Eased, so the downwash fades in and out rather than switching. */
@@ -88,6 +99,19 @@ export default function PlayerGlider() {
 
     if (craftMaterialRef.current) {
       craftMaterialRef.current.uTime = state.clock.elapsedTime;
+
+      // Applied from the SERVER's answer rather than remembered locally.
+      // The roll happens there, and a craft that decided its own form would
+      // be wearing something nobody else could see.
+      const plumage = readOwnPlumage();
+      if (plumage !== wornRef.current) {
+        wornRef.current = plumage;
+        const look = lookOf(plumage);
+        const mat = craftMaterialRef.current;
+        mat.uHull.set(look ? look.hull : DEFAULT_CRAFT.hull);
+        mat.uEdge.set(look ? look.edge : DEFAULT_CRAFT.edge);
+        mat.uCore.set(look ? look.core : DEFAULT_CRAFT.core);
+      }
     }
 
     // The flight model itself now lives in the shared package, so the

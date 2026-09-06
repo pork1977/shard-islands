@@ -7,6 +7,7 @@ import { generateGlider } from "@/lib/world/generateGlider";
 import { ROOM } from "@shard-islands/shared";
 import { readRemotePlayers, type RemoteSnapshot } from "@/lib/net/connection";
 import { SEAT_COLOURS } from "@/lib/world/seatColours";
+import { lookOf } from "@/lib/world/plumageLook";
 
 
 const UP = new THREE.Vector3(0, 0, 1);
@@ -29,6 +30,12 @@ export default function RemoteGliders() {
 
   const geometry = useMemo(() => generateGlider(), []);
   const colours = useMemo(() => SEAT_COLOURS.map((c) => new THREE.Color(c)), []);
+  /**
+   * A craft wearing a rare form is drawn in that form's colour instead of
+   * its seat's. The trail behind it still carries the seat colour, which is
+   * the one that decides anything — this is a trophy, not a rule.
+   */
+  const plumageColours = useMemo(() => new Map<number, THREE.Color>(), []);
 
   const scratch = useMemo(
     () => ({
@@ -73,7 +80,17 @@ export default function RemoteGliders() {
         i,
         scratch.matrix.compose(scratch.position, scratch.quaternion, scratch.scale),
       );
-      mesh.setColorAt(i, colours[p.colour % colours.length]);
+      const look = lookOf(p.plumage);
+      if (look) {
+        let c = plumageColours.get(p.plumage);
+        if (!c) {
+          c = new THREE.Color(look.distant);
+          plumageColours.set(p.plumage, c);
+        }
+        mesh.setColorAt(i, c);
+      } else {
+        mesh.setColorAt(i, colours[p.colour % colours.length]);
+      }
     }
 
     // Unused instances are collapsed rather than left where a player who has
