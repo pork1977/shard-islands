@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useGameStore, type GamePhase } from "@/lib/store/useGameStore";
 import { fallRun } from "@/lib/world/fallMotes";
 import { PLUNGE_AT } from "@/lib/timeline";
+import { THE_POINT } from "@/lib/world/howToPlay";
 
 /**
  * The tally of what was caught on the way down.
@@ -101,6 +102,27 @@ function FallTally({ phase, strikeAt }: { phase: GamePhase; strikeAt: number }) 
         }}
       >
         {caught ? `trail +${tally.bonus}` : "gather on the way down"}
+      </div>
+
+      {/*
+        The one sentence the game never actually said.
+        
+        Everything else teaches itself as it happens — the slipstream names
+        itself when you are in one, the Beacon announces its own countdown —
+        but nothing ever told a new player what any of it was FOR. It goes
+        here rather than on the glass because the fall is twelve seconds in
+        which they are committed, watching, and have almost nothing to do:
+        the one moment a sentence can be read without costing them anything.
+      */}
+      <div
+        style={{
+          marginTop: 14,
+          fontSize: 12.5,
+          letterSpacing: 0.6,
+          color: "rgba(200,228,255,0.5)",
+        }}
+      >
+        {THE_POINT}
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ import DraftHud from "./DraftHud";
 import ClipHud from "./ClipHud";
 import BeaconHud from "./BeaconHud";
 import RollHud from "./RollHud";
+import HowToPlay from "./HowToPlay";
 import WorldScene from "./WorldScene";
 import PlayerGlider from "@/components/world/PlayerGlider";
 import RemoteGliders from "@/components/world/RemoteGliders";
@@ -113,6 +114,9 @@ export default function Experience() {
       <ClipHud />
       <BeaconHud />
       <RollHud />
+      {/* a question mark for the people who want one, and nothing for the
+          people who do not */}
+      <HowToPlay />
       <NetDebug />
       <ControlsHint />
     </>

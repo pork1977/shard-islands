@@ -21,6 +21,9 @@ const POP_SECONDS = 0.3;
  * cutscene: without it you are steering blind and only find out where you
  * chose once you are already there.
  */
+/** Outer radius of the landing marker, in metres. */
+const RING_RADIUS = 43;
+
 export default function FallMotes() {
   const impact = useGameStore((s) => s.impact);
 
@@ -60,7 +63,7 @@ export default function FallMotes() {
       halo: new THREE.OctahedronGeometry(15, 0),
       // sized to read from several hundred metres up, which is the only
       // altitude it is ever looked at from
-      ring: new THREE.RingGeometry(34, 43, 56),
+      ring: new THREE.RingGeometry(34, RING_RADIUS, 56),
       disc: new THREE.CircleGeometry(34, 44),
     }),
     [],
@@ -122,7 +125,26 @@ export default function FallMotes() {
     // below, so it stays in frame and so it answers the question the player
     // is actually asking: not where am I, but where is this taking me.
     const [lx, ly] = fallRun.landing;
-    const ground = TERRAIN_BASE_Z + terrainHeightAt(lx, ly);
+
+    // The HIGHEST ground under the ring, not the ground at its centre.
+    //
+    // The ring is eighty-six metres across, which is wide enough to span a
+    // hillside, and sitting it on the height of its middle buried the
+    // uphill half. Sampling the rim and taking the maximum lifts the whole
+    // marker clear of whatever is under it.
+    let ground = terrainHeightAt(lx, ly);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const rim = terrainHeightAt(lx + Math.cos(a) * RING_RADIUS, ly + Math.sin(a) * RING_RADIUS);
+      const mid = terrainHeightAt(
+        lx + Math.cos(a) * RING_RADIUS * 0.5,
+        ly + Math.sin(a) * RING_RADIUS * 0.5,
+      );
+      if (rim > ground) ground = rim;
+      if (mid > ground) ground = mid;
+    }
+    ground += TERRAIN_BASE_Z;
+
     const breathe = 1 + Math.sin(now * 3.1) * 0.05;
 
     if (ringRef.current) {
@@ -152,22 +174,38 @@ export default function FallMotes() {
         />
       </instancedMesh>
 
-      <mesh ref={ringRef} geometry={geo.ring}>
+      {/*
+        Drawn THROUGH the landscape, deliberately.
+
+        Lifting it above the ground under it fixes being buried by its own
+        hill, but not being hidden by one in between: the descent camera
+        looks forward as well as down, so any ridge between the player and
+        where they are going was cutting the marker in half.
+
+        It is a targeting reticle, not scenery. A reticle that a hill can
+        erase is answering "where will I land" with "sometimes". The cost is
+        that it also paints over anything else in the way, which at this
+        altitude means the occasional mote — a fair trade for a marker that
+        is always readable.
+      */}
+      <mesh ref={ringRef} geometry={geo.ring} renderOrder={2}>
         <meshBasicMaterial
           color="#8ef4ff"
           transparent
           opacity={0.5}
           side={THREE.DoubleSide}
           depthWrite={false}
+          depthTest={false}
           toneMapped={false}
         />
       </mesh>
 
-      <mesh ref={discRef} geometry={geo.disc}>
+      <mesh ref={discRef} geometry={geo.disc} renderOrder={1}>
         <meshBasicMaterial
           color="#5fe4ff"
           transparent
           opacity={0.11}
+          depthTest={false}
           side={THREE.DoubleSide}
           depthWrite={false}
           blending={THREE.AdditiveBlending}
