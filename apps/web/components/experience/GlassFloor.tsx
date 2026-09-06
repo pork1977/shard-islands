@@ -127,10 +127,28 @@ function HandprintHotspot() {
  * that says "press here" is a product, and a page that says DON'T is a dare.
  * It sits low and off-centre, angled, well away from the handprint — the
  * hand is still the invitation, and this is just something somebody wrote.
+ *
+ * Its position has to follow the viewport, which it did not at first. The
+ * camera's vertical field of view is fixed, so the WIDTH of world visible
+ * shrinks with the aspect ratio: a place that is comfortably off to one
+ * side on a laptop is off the edge entirely on a phone held upright. The
+ * word read "N'T" on a portrait screen — on the one screen this whole
+ * project opens with, and the one most likely to be seen on a phone first.
  */
 function Graffiti() {
   const texture = useMemo(() => generateSprayTextTexture("DON'T"), []);
   const meshRef = useRef<THREE.Mesh>(null);
+  const viewport = useThree((state) => state.viewport);
+
+  const WIDTH = 2.5;
+  const MARGIN = 0.25;
+
+  // Shrink only when there is genuinely not enough room, so the desktop
+  // composition — which is the one that was art directed — is untouched.
+  const scale = Math.min(1, (viewport.width - MARGIN * 2) / WIDTH);
+  // Then sit as far off-centre as it can while staying wholly on screen.
+  const roomToTheLeft = viewport.width / 2 - (WIDTH * scale) / 2 - MARGIN;
+  const x = -Math.min(1.15, Math.max(0, roomToTheLeft));
 
   useFrame((state) => {
     if (!meshRef.current) return;
@@ -143,11 +161,12 @@ function Graffiti() {
   return (
     <mesh
       ref={meshRef}
-      position={[-1.15, -1.05, 0.008]}
+      position={[x, -1.05, 0.008]}
       rotation={[0, 0, -0.07]}
+      scale={[scale, scale, 1]}
       raycast={() => null}
     >
-      <planeGeometry args={[2.5, 1.05]} />
+      <planeGeometry args={[WIDTH, 1.05]} />
       <meshBasicMaterial
         map={texture}
         transparent
