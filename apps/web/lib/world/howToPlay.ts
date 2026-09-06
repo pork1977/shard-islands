@@ -40,11 +40,19 @@ export const THE_POINT = "Your glowing trail is your score. Longest trail wins."
  */
 export const SUPPORT = {
   /**
-   * Empty means the whole block renders nothing.
+   * A Stripe Payment Link, priced "customer chooses what to pay".
    *
-   * A donate link that 404s is worse than no donate link, so this stays
-   * blank until there is a real page on the other end of it. Fill it in and
-   * the panel grows a footer; leave it and nothing anywhere changes.
+   * Stripe rather than a donations platform because the money then arrives
+   * in the same place the rest of it does, and a platform sitting in the
+   * middle is a cut for hosting a button we have already built. The link
+   * itself is public — there is nothing secret about a checkout URL — so it
+   * lives here in the source rather than in an environment variable, where
+   * it would be one more thing to remember on a redeploy.
+   *
+   * Empty means the whole block renders nothing. A donate link that 404s is
+   * worse than no donate link, so this stays blank until there is a real
+   * page on the other end of it. Fill it in and the panel grows a footer;
+   * leave it and nothing anywhere changes.
    */
   url: "",
   title: "Keep it in the air",
