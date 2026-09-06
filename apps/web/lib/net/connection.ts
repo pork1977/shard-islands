@@ -67,7 +67,35 @@ export const connection: Connection = {
   error: null,
 };
 
-const ENDPOINT = process.env.NEXT_PUBLIC_GAME_SERVER_URL ?? "ws://localhost:2567";
+/** Where the room lives. */
+const LOCAL_SERVER = "ws://localhost:2567";
+const PRODUCTION_SERVER = "wss://shard-islands.fly.dev";
+
+/**
+ * NEXT_PUBLIC_GAME_SERVER_URL overrides this, but nothing has to set it.
+ *
+ * The obvious version — env var or localhost — has a nasty failure mode:
+ * forget the variable on a hosting dashboard and the deployed site quietly
+ * tries to reach a server on the player's OWN machine, fails, and shows
+ * them a beautiful empty sky. Nothing is broken on screen, because a failed
+ * join is deliberately silent, so the bug looks like "nobody else is
+ * playing" and can survive a long time.
+ *
+ * So the default depends on where the page came from: served from
+ * localhost, talk to a local server; served from anywhere else, talk to
+ * production. The server's hostname is public — it is in the README — so
+ * there is nothing here worth hiding in a variable.
+ */
+function resolveEndpoint(): string {
+  const configured = process.env.NEXT_PUBLIC_GAME_SERVER_URL;
+  if (configured) return configured;
+  if (typeof window === "undefined") return LOCAL_SERVER;
+  const host = window.location.hostname;
+  const local = host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+  return local ? LOCAL_SERVER : PRODUCTION_SERVER;
+}
+
+const ENDPOINT = resolveEndpoint();
 const ROOM_NAME = "shard_islands";
 
 /**
