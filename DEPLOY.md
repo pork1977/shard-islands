@@ -153,6 +153,30 @@ A refused origin logs `[server] refused origin https://...`, which almost
 always means the domain in `ALLOWED_ORIGINS` does not exactly match the one
 in the browser's address bar.
 
+**Vercel Authentication.** A new project on a Pro team starts with SSO
+protection on, so every `.vercel.app` URL asks for a login and the game is
+playable only by you. Project Settings -> Deployment Protection.
+
+### Proving the origin lock from a browser
+
+`originCheck.ts` proves the logic locally. To prove the DEPLOYED server, use
+a real browser, because a browser is the only thing the lock is defending
+against — open any page on an origin that is NOT in the allowlist (the local
+dev site does nicely) and run:
+
+```js
+new WebSocket("wss://shard-islands.fly.dev/")   // must fail
+new WebSocket("ws://localhost:2567/")           // control: must connect
+```
+
+The control matters. Without it a refusal could just as easily be a bad URL,
+and "it failed" would look like success.
+
+Driving a real colyseus.js client from Node was tried for this and does not
+work: under Node its socket arrives with no Origin however the header is
+injected, so the test reports a wide-open server that a browser is in fact
+refused by.
+
 ---
 
 ## Optional: a staging server for preview branches

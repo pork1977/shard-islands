@@ -26,6 +26,9 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.43
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       colyseus.js:
         specifier: ^0.16.22
         version: 0.16.22
@@ -38,6 +41,9 @@ importers:
       typescript:
         specifier: ^5
         version: 5.9.3
+      ws:
+        specifier: ^8.21.3
+        version: 8.21.3
 
   apps/web:
     dependencies:

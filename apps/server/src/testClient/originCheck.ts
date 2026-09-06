@@ -19,9 +19,26 @@ import { dirname, resolve } from "path";
  *   pnpm --filter server exec tsx src/testClient/originCheck.ts
  *
  * Run `pnpm --filter server build` first; it checks dist, not src.
+ *
+ * A raw handshake is the right level for this, and driving a real
+ * colyseus.js client was tried and abandoned. Under Node that client's
+ * socket reaches verifyClient with no Origin at all, however the header is
+ * injected, so the test reported a wide-open server that a browser is in
+ * fact refused by — a false alarm, which is worse than no alarm. The header
+ * is what the check reads and the handshake is where it reads it; a browser
+ * always sends one and cannot forge it.
+ *
+ * The deployed server is verified from an actual browser instead. From a
+ * page on any origin not in the allowlist:
+ *
+ *   new WebSocket("wss://shard-islands.fly.dev/")   // must fail
+ *
+ * with a page on an unlocked server as the control, so a refusal cannot be
+ * mistaken for a bad URL.
  */
 
 const PORT = 2591;
+
 const ALLOWED = "https://shard-islands.example";
 const bundle = resolve(dirname(fileURLToPath(import.meta.url)), "../../dist/index.cjs");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

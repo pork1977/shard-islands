@@ -17,9 +17,11 @@
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/ws": "^8.18.1",
     "colyseus.js": "^0.16.22",
     "esbuild": "^0.24.0",
     "tsx": "^4.19.2",
-    "typescript": "^5"
+    "typescript": "^5",
+    "ws": "^8.21.3"
   }
 }
