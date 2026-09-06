@@ -127,7 +127,9 @@ export default function HowToPlay() {
             style={{
               maxWidth: 460,
               width: "calc(100% - 40px)",
-              maxHeight: "80vh",
+              // Raised when a fifth mechanic arrived and pushed the Fly
+              // button below the fold on an ordinary laptop.
+              maxHeight: "88vh",
               overflowY: "auto",
               padding: "22px 24px",
               borderRadius: 14,
@@ -243,7 +245,7 @@ export default function HowToPlay() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginTop: 14 }}>
+    <div style={{ marginTop: 12 }}>
       <div
         style={{
           fontSize: 10,
@@ -262,7 +264,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Row({ name, keys, what }: { name: string; keys?: string; what: string }) {
   return (
-    <div style={{ marginBottom: 7 }}>
+    <div style={{ marginBottom: 6 }}>
       <span style={{ color: "#fff", fontWeight: 600 }}>{name}</span>
       {keys && (
         <span

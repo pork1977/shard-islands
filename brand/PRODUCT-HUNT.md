@@ -73,6 +73,7 @@ I built this one for you lot, genuinely. No waitlist, no sign-up, no "book a dem
 • Cut ACROSS someone else's trail and it snaps. Whatever falls off is loose for anyone to collect. Your own colour can never cut you
 • Double-tap A or D for a barrel roll that shoves everyone near you away and makes you briefly uncuttable
 • The spiked dome charges up and then opens. First one to the core floating above it gets 20 seconds where their trail cuts anyone who touches it
+• Four rare nodes stand in tall columns of white light. Fly through one and your craft transforms — Phoenix, Prism or Void — for the rest of the session. It grants no advantage at all. It just means everyone in the sky can see you coming
 
 Longest trail wins. There is no round timer and no end screen — it is king-of-the-hill, so you drop in, take the top spot off whoever has it, and leave when you feel like it. Your own best runs are saved in your browser, so there is something to come back and beat.
 

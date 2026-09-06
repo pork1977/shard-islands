@@ -83,6 +83,13 @@ export const MECHANICS: Mechanic[] = [
     what: "cut ACROSS a rival's trail and it snaps. What falls off is loose for anyone to collect. Your own colour is always safe.",
   },
   {
+    name: "Rare nodes",
+    what:
+      "four of them, each standing in a tall column of white light. Fly through one and " +
+      "your craft transforms for the rest of the session. No advantage — it just means " +
+      "everyone can see you coming.",
+  },
+  {
     name: "The Beacon",
     what: "the spiked dome. It charges — faster with craft circling it — then opens. First one to reach the core takes it, and for twenty seconds their trail cuts anyone who touches it.",
   },
