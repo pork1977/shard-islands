@@ -632,6 +632,14 @@ export function readTrailForSeat(seat: number, nowMs: number): number[] {
  * as something different.
  */
 export function readOwnPlumage(): number {
+  // Dev only: ?plumage=1|2|3 wears a form without having to find a node.
+  // Flying a browser into a 34-metre bubble by hand to check whether the art
+  // is right is not a workable way to look at the art.
+  if (process.env.NODE_ENV !== "production" && typeof window !== "undefined") {
+    const forced = new URLSearchParams(window.location.search).get("plumage");
+    if (forced) return Number(forced) || 0;
+  }
+
   const room = connection.room;
   if (!room?.state?.players) return 0;
   const me = room.state.players.get(connection.selfId) as

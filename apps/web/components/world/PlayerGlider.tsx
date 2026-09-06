@@ -39,7 +39,18 @@ const UP = new THREE.Vector3(0, 0, 1);
 const DEFAULT_CRAFT = { hull: "#0b0a1f", edge: "#7ff0ff", core: "#2bd6ff" };
 
 export default function PlayerGlider() {
-  const geometry = useMemo(() => generateGlider(), []);
+  /**
+   * Polled rather than read in the frame loop, because the SHAPE changes
+   * too — a rare form is a different silhouette, not a repaint — and new
+   * geometry has to be built outside the render.
+   */
+  const [worn, setWorn] = useState(0);
+  useEffect(() => {
+    const poll = setInterval(() => setWorn(readOwnPlumage()), 400);
+    return () => clearInterval(poll);
+  }, []);
+
+  const geometry = useMemo(() => generateGlider(worn), [worn]);
   const groupRef = useRef<THREE.Group>(null);
   const craftMaterialRef = useRef<InstanceType<typeof GliderCraftMaterial>>(null);
   const input = useFlightControls();
