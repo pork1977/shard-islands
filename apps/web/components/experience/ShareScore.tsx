@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { readRoster, type RosterEntry } from "@/lib/net/connection";
 import { useGameStore } from "@/lib/store/useGameStore";
 
-const SITE = "https://www.shardisland.me";
+const SITE = "https://www.shardislands.me";
 
 /**
  * Share what you managed.

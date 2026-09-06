@@ -10,7 +10,7 @@ import "./globals.css";
  * real one is the cheap half of the fix; redirecting the others at the edge
  * is the thorough half.
  */
-const SITE = "https://www.shardisland.me";
+const SITE = "https://www.shardislands.me";
 
 const TITLE = "Shard Islands — a multiplayer flight game in your browser";
 

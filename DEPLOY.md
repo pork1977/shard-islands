@@ -115,10 +115,16 @@ if you attach one.
 
 | | |
 |---|---|
-| `www.shardisland.me` | **the one that serves the game** |
-| `shardisland.me` | 308 redirect to www |
-| `www.shardislands.me`, `shardislands.me` | the plural spelling, same project |
-| `shard-islands.vercel.app` | Vercel's own, still live |
+| `www.shardislands.me` | **canonical — the one that serves the game** |
+| `shardislands.me` | 308 to the canonical |
+| `www.shardisland.me`, `shardisland.me` | the singular spelling, 308 to the canonical |
+| `shard-islands.vercel.app` | Vercel's own, still serves; covered by the canonical tag |
+
+**Vercel will not build a redirect chain.** If A already redirects to B, it
+refuses to let you redirect B anywhere — so the order matters: repoint
+whatever points AT a domain before redirecting the domain itself. Changing
+which spelling is canonical means doing the apex first and the www second,
+not the other way round.
 
 **The apex redirects to `www`, so `www` is the origin a browser actually
 sends.** That is the one the allowlist must contain. Listing only the apex
@@ -126,7 +132,10 @@ would give a site that loads perfectly and leaves every player alone in the
 sky — the redirect happens before the game ever opens a socket, so by the
 time it does, the page came from `www`.
 
-Both spellings are listed, so it does not matter which one anybody types.
+All four hostnames stay on the allowlist even though three of them now only
+ever redirect. They cost nothing as entries, and if the canonical spelling
+is ever changed again the alternative is a baffling hour of "why is
+everybody alone".
 
 ## 3. Lock the origins
 
@@ -135,7 +144,7 @@ any website can point its traffic at your server and run their game on your
 bill.
 
 ```bash
-fly secrets set ALLOWED_ORIGINS="https://www.shardisland.me,https://shardisland.me,https://www.shardislands.me,https://shardislands.me,https://shard-islands.vercel.app"
+fly secrets set ALLOWED_ORIGINS="https://www.shardislands.me,https://shardislands.me,https://www.shardislands.me,https://shardislands.me,https://shard-islands.vercel.app"
 ```
 
 Use the real domain from step 2. Several are allowed, comma-separated — list
@@ -159,8 +168,8 @@ still be unreachable from the one desk that has been checking on it.
 Test with a resolver that was never asked too early:
 
 ```bash
-nslookup www.shardisland.me 1.1.1.1
-curl -I --resolve www.shardisland.me:443:<that IP> https://www.shardisland.me/
+nslookup www.shardislands.me 1.1.1.1
+curl -I --resolve www.shardislands.me:443:<that IP> https://www.shardislands.me/
 ```
 
 **Do not add `*.vercel.app` to the production server.** It would trust every

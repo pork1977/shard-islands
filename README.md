@@ -1,6 +1,6 @@
 # Shard Islands
 
-**Playing at [www.shardisland.me](https://www.shardisland.me)**
+**Playing at [www.shardislands.me](https://www.shardislands.me)**
 
 A frosted glass floor with one glowing handprint on it. No text, no buttons,
 nothing to read. Press it and the pane shatters — real Voronoi shard
