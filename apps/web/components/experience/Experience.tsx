@@ -8,6 +8,7 @@ import FractureScene from "./FractureScene";
 import FallMotes from "./FallMotes";
 import FallHud from "./FallHud";
 import Presence from "./Presence";
+import SoloNotice from "./SoloNotice";
 import NetDebug from "./NetDebug";
 import Scoreboard from "./Scoreboard";
 import DraftHud from "./DraftHud";
@@ -110,6 +111,7 @@ export default function Experience() {
       </Canvas>
       <FallHud />
       <Presence />
+      <SoloNotice />
       <Scoreboard />
       <DraftHud />
       <ClipHud />

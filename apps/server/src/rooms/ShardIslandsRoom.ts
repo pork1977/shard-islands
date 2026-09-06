@@ -3,6 +3,7 @@ import {
   ROOM,
   ROLL,
   SKY_FULL,
+  SPAWN,
   SERVER_TICK_RATE_HZ,
   TRAIL,
   BEACON,
@@ -263,11 +264,20 @@ export class ShardIslandsRoom extends Room<RoomState> {
     this.onMessage("spawn", (client, data: SpawnMessage) => {
       const player = this.state.players.get(client.sessionId);
       const rt = this.runtime.get(client.sessionId);
-      if (!player || !rt) return;
+      // ONCE. The descent handler has always had this guard and this one
+      // did not, which meant a client could re-land at will: teleport
+      // anywhere, and — because the message carries a trail length — hold
+      // any score it liked for as long as it kept sending. Two lines in a
+      // console, on a game with a visible leaderboard.
+      if (!player || !rt || rt.simulating) return;
 
-      // Taken on trust. The client alone knows where its descent ended, and
-      // the descent is the one part of a session the server does not
-      // simulate; nothing is contested until the player is flying.
+      // Where it landed is still taken on trust. The client alone knows
+      // where its descent ended, the server does not simulate the fall, and
+      // nothing is contested until the player is flying — a first position
+      // chosen favourably is not much of an advantage when everybody starts
+      // somewhere.
+      //
+      // The trail length is different, because it is the score.
       rt.sim = createFlightSim(data.x, data.y, data.z, data.yaw);
       rt.sim.pitch = data.pitch;
       rt.sim.speed = data.speed;
@@ -278,7 +288,10 @@ export class ShardIslandsRoom extends Room<RoomState> {
       rt.lastInputAt = Date.now();
 
       player.simulated = true;
-      player.trailLength = data.trailLength;
+      player.trailLength = Math.max(
+        0,
+        Math.min(SPAWN.maxTrailLength, Math.round(data.trailLength) || 0),
+      );
       this.publish(player, rt);
     });
 

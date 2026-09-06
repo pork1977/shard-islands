@@ -213,3 +213,21 @@ export const ROOM = {
  * A number agreed in two places is a number that will disagree.
  */
 export const SKY_FULL = 4200;
+
+/**
+ * What the server will believe about a player who has just landed.
+ *
+ * The descent is the one part of a session the server does not simulate —
+ * the client alone knows where its fall ended — so the landing message is
+ * taken on trust by design. Trust with no ceiling is a different thing
+ * though: the same message carries the trail length, and a value taken on
+ * faith is a score anyone can type into a console.
+ *
+ * Twelve seconds of falling past cores worth CORE_TRAIL_VALUE each does not
+ * plausibly produce more than this, and it is a long way under the 350 cap
+ * a good flight reaches. Generous enough that a genuinely brilliant descent
+ * is never clipped, mean enough that nobody arrives as the Alpha.
+ */
+export const SPAWN = {
+  maxTrailLength: 120,
+} as const;
