@@ -35,7 +35,7 @@ Break the glass. Fly. Your light trail is your score.
 ## Description (260 max)
 
 ```
-A frosted glass floor, one glowing handprint, one word: DON'T. Press it and the floor shatters — you fall into a shared sky with up to 24 others. Fly through Energy Cores to grow your light trail. Longest trail wins. No sign-up, nothing to install.
+A frosted glass floor, one glowing handprint, one word: DON'T. Press it and the floor shatters — you fall into a shared sky of up to 24 craft. Fly through Energy Cores to grow your light trail. Longest trail wins. No sign-up, nothing to install.
 ```
 
 ## Topics
@@ -78,7 +78,9 @@ Longest trail wins. That's the whole game.
 
 **Under the hood:** Next.js + React Three Fiber on the front, a Colyseus server on Fly.io running authoritative physics at 20 ticks a second, with client-side prediction and reconciliation so it feels instant even from the other side of the planet. Both halves run the identical physics code out of a shared package, which is the only reason the prediction lines up.
 
-If the sky is empty when you arrive, give it a minute — or drag a friend in, it is a much better game with someone to cut up.
+It is also capped at 64 people flying at once. I load-tested it properly and the tick rate falls off a cliff past about seventy — so rather than let a busy day turn into a laggy mess for everybody, the ceiling sits below where I measured it sagging.
+
+So if you land in an empty sky, it is either a quiet moment or the server politely telling you it is full — either way, give it a few minutes and come back, or drag a friend in. It is a much better game with someone to cut up.
 
 It is free and it always will be. Tell me what breaks 🙏
 ```

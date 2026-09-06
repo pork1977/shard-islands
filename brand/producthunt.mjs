@@ -202,7 +202,7 @@ const s3 = slide(`
   ${mech(90, CYAN, "Trail = score", "Fly through Energy Cores", "and your light trail grows.")}
   ${mech(500, PINK, "Tail-clip", "Cut ACROSS a rival&apos;s trail", "and it snaps. Yours is safe.")}
   ${mech(890, LIME, "The Beacon", "A dome charges, then opens.", "First one there is untouchable.")}
-  ${T(GW / 2, 560, 26, "Up to 24 in a sky · server-authoritative · 20 ticks a second", { anchor: "middle", fill: "rgba(226,242,255,0.5)" })}
+  ${T(GW / 2, 560, 26, "Up to 24 in a sky · server-authoritative · client-side prediction", { anchor: "middle", fill: "rgba(226,242,255,0.5)" })}
 `);
 
 function key(x, cap, what) {
