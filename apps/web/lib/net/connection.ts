@@ -130,28 +130,72 @@ export function beginJoin() {
   void tryJoin(0, performance.now());
 }
 
+/**
+ * Rejoins from a solo flight, and tells the server we are already up here.
+ *
+ * The ordinary join happens during the descent, and FractureScene sends the
+ * landing state the moment the fall ends. A player who was refused never had
+ * that moment — they were already flying by the time a slot came free — so
+ * joining alone would leave them connected but not simulated: a craft the
+ * server never runs, never scores and never shows anybody. The landing
+ * message is what makes a player real, and it reads live state, so sending
+ * it now hands over the position, heading and speed they actually have.
+ *
+ * Their trail does not survive the crossing. The server has no way to tell a
+ * solo flight to three hundred from a number typed into a console — none of
+ * it happened anywhere it could see — so the landing clamp applies and the
+ * solo run is worth what any landing is worth. Nothing is really lost: it
+ * still counted toward the personal best on the way past.
+ */
+export async function rejoin(): Promise<"joined" | "full" | "failed"> {
+  if (connection.status === "joined") return "joined";
+  if (joining) return "full";
+
+  joining = true;
+  connection.status = "joining";
+  connection.error = null;
+
+  try {
+    const room = await new Client(ENDPOINT).joinOrCreate(ROOM_NAME);
+    adopt(room, performance.now());
+    joining = false;
+    sendSpawn();
+    return "joined";
+  } catch (err) {
+    const code = (err as { code?: number } | null)?.code;
+    connection.status = "solo";
+    connection.error = null;
+    joining = false;
+    return code === SKY_FULL ? "full" : "failed";
+  }
+}
+
+/** Everything that has to be true once a room is ours. */
+function adopt(room: Room, startedAt: number) {
+  connection.room = room;
+  connection.selfId = room.sessionId;
+  connection.joinMs = Math.round(performance.now() - startedAt);
+  connection.status = "joined";
+
+  room.onLeave(() => {
+    connection.room = null;
+    connection.selfId = "";
+    connection.status = "offline";
+    joining = false;
+  });
+
+  room.onError((code, message) => {
+    connection.error = `${code} ${message ?? ""}`.trim();
+  });
+}
+
 async function tryJoin(attempt: number, startedAt: number) {
   connection.attempts = attempt + 1;
 
   try {
     const client = new Client(ENDPOINT);
     const room = await client.joinOrCreate(ROOM_NAME);
-
-    connection.room = room;
-    connection.selfId = room.sessionId;
-    connection.joinMs = Math.round(performance.now() - startedAt);
-    connection.status = "joined";
-
-    room.onLeave(() => {
-      connection.room = null;
-      connection.selfId = "";
-      connection.status = "offline";
-      joining = false;
-    });
-
-    room.onError((code, message) => {
-      connection.error = `${code} ${message ?? ""}`.trim();
-    });
+    adopt(room, startedAt);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 

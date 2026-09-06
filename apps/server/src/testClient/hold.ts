@@ -19,11 +19,26 @@ const arg = (name: string, fallback: number) => {
 };
 
 const COUNT = arg("count", 1);
+/**
+ * Release after this many seconds, 0 to hold until killed.
+ *
+ * Killing the task is not the same as killing the client: pnpm spawns tsx
+ * as a child, so stopping the wrapper leaves the sockets open and the seats
+ * held — which looks exactly like a bug in whatever is being tested.
+ */
+const SECONDS = arg("seconds", 0);
 
 async function main() {
   const held = [];
   for (let i = 0; i < COUNT; i++) held.push(await join());
   console.log(`holding ${held.length} seat(s) — ctrl-c to release`);
+
+  if (SECONDS > 0) {
+    await new Promise((r) => setTimeout(r, SECONDS * 1000));
+    for (const room of held) await room.leave();
+    console.log("released");
+    process.exit(0);
+  }
 
   // Nothing to do but exist. The rooms only drop a client that goes quiet
   // for a long time, and these are quiet by design.

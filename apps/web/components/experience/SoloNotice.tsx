@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { beginJoin, connection } from "@/lib/net/connection";
+import { connection, rejoin } from "@/lib/net/connection";
 import { useGameStore } from "@/lib/store/useGameStore";
 
 /**
@@ -30,19 +30,21 @@ export default function SoloNotice() {
   const phase = useGameStore((s) => s.phase);
   const [status, setStatus] = useState(connection.status);
   const [trying, setTrying] = useState(false);
+  /** Set when a retry came back refused, so the reason is visible. */
+  const [stillFull, setStillFull] = useState(false);
 
   useEffect(() => {
     const poll = setInterval(() => setStatus(connection.status), 400);
     return () => clearInterval(poll);
   }, []);
 
-  // A retry either lands or comes back refused; both end the trying state,
-  // and a fixed window is simpler than threading a result back out.
+  // "Still full" is worth saying and not worth leaving up: it answers the
+  // click, then gets out of the way so the invitation is there to take again.
   useEffect(() => {
-    if (!trying) return;
-    const done = setTimeout(() => setTrying(false), 2600);
+    if (!stillFull) return;
+    const done = setTimeout(() => setStillFull(false), 4000);
     return () => clearTimeout(done);
-  }, [trying]);
+  }, [stillFull]);
 
   if (phase !== "flying" || (status !== "solo" && !trying)) return null;
 
@@ -78,11 +80,15 @@ export default function SoloNotice() {
           color: "rgba(210,240,255,0.45)",
         }}
       >
-        the sky was full ·{" "}
+        {stillFull ? "sky is still full, try again in a moment" : "the sky was full"} ·{" "}
         <button
-          onClick={() => {
+          onClick={async () => {
             setTrying(true);
-            beginJoin();
+            setStillFull(false);
+            const outcome = await rejoin();
+            setTrying(false);
+            // "joined" needs nothing: the notice unmounts on the next poll.
+            if (outcome !== "joined") setStillFull(true);
           }}
           disabled={trying}
           style={{
@@ -97,7 +103,7 @@ export default function SoloNotice() {
             textUnderlineOffset: 3,
           }}
         >
-          {trying ? "looking…" : "try again"}
+          {trying ? "looking…" : "join the others!"}
         </button>
       </div>
     </div>
