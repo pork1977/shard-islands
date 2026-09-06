@@ -54,7 +54,7 @@ export const SUPPORT = {
    * page on the other end of it. Fill it in and the panel grows a footer;
    * leave it and nothing anywhere changes.
    */
-  url: "",
+  url: "https://donate.stripe.com/14A4gy11K2tybeD8Jc77O00",
   title: "Keep it in the air",
   why:
     "No ads, no accounts, nothing to buy — but there is a server behind this " +
