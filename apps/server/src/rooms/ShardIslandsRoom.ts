@@ -1,7 +1,8 @@
-import { Room, type Client } from "@colyseus/core";
+import { matchMaker, Room, ServerError, type Client } from "@colyseus/core";
 import {
   ROOM,
   ROLL,
+  SKY_FULL,
   SERVER_TICK_RATE_HZ,
   TRAIL,
   BEACON,
@@ -151,8 +152,58 @@ interface ShardTiming {
  * reported. Nothing is contested there — by the time anything is, because
  * tail-clip has arrived, the descent is long over.
  */
+/**
+ * How many craft this machine will carry before it turns people away.
+ *
+ * Measured, not guessed. Every room ticks on the same Node event loop and
+ * Node has one thread, so the cost is machine-wide however the players are
+ * distributed. Against production on a performance-1x machine:
+ *
+ *     24 craft  20.00 Hz      ~64 craft  16.37 Hz
+ *     48 craft  18.12 Hz      ~88 craft   9.49 Hz
+ *     96 craft   8.83 Hz
+ *
+ * Gradual to about sixty-four, then a cliff. Sixty-four still holds better
+ * than 16Hz, which is the rate this game was developed at for weeks — the
+ * room measures its own tick length so the physics is right either way —
+ * and below about twelve the interpolation starts to show.
+ *
+ * Past the cliff nobody wins: the tick is too slow to play on AND clients
+ * begin dropping out, so an uncapped machine turns one enthusiastic day
+ * into a broken game for everybody rather than a good game for as many as
+ * fit.
+ *
+ * A dedicated core was tried and bought very little — 17.32 to 18.12 Hz at
+ * 48 craft, and the knee did not move. That is the evidence that this is
+ * the cost of the physics itself rather than of the hardware under it, and
+ * the reason the number below is not simply raised by paying Fly more.
+ *
+ * Override with MAX_CONCURRENT after re-running roomLoadCheck against
+ * whatever the machine is at the time.
+ */
+const CAPACITY = Number(process.env.MAX_CONCURRENT ?? 0) || 64;
+
 export class ShardIslandsRoom extends Room<RoomState> {
   maxClients = ROOM.maxPlayers;
+
+  /**
+   * Refuse a join that would cost the people already flying their tick rate.
+   *
+   * This is deliberately NOT a wall. The client treats a failed join as a
+   * solo session and flies on alone — which is the whole reason the landing
+   * sequence has no lobby and no spinner — so being turned away here costs
+   * a player the other craft in the sky, not the game. Better than the
+   * alternative, which is everyone at 6Hz.
+   *
+   * Counted machine-wide off the matchmaker rather than per room, because
+   * the constraint is the event loop, not the room.
+   */
+  static async onAuth() {
+    if (matchMaker.stats.local.ccu >= CAPACITY) {
+      throw new ServerError(SKY_FULL, "the sky is full");
+    }
+    return true;
+  }
 
   private runtime = new Map<string, Runtime>();
 

@@ -1,5 +1,5 @@
 import { Client, type Room } from "colyseus.js";
-import { SERVER_TICK_RATE_HZ } from "@shard-islands/shared";
+import { SERVER_TICK_RATE_HZ, SKY_FULL } from "@shard-islands/shared";
 import { playerState } from "./playerState";
 import { drainOutbox, type SelfSnapshot } from "./prediction";
 
@@ -19,7 +19,17 @@ import { drainOutbox, type SelfSnapshot } from "./prediction";
  * through React would re-render the scene tree for something no component
  * needs to re-render for.
  */
-export type ConnectionStatus = "offline" | "joining" | "joined" | "failed";
+export type ConnectionStatus =
+  | "offline"
+  | "joining"
+  | "joined"
+  /**
+   * Flying, but alone: the server was up and answered, and said it was
+   * full. Distinct from "failed" because nothing is wrong — there is
+   * nothing to retry and nothing to report as an error.
+   */
+  | "solo"
+  | "failed";
 
 export interface RemoteSnapshot {
   id: string;
@@ -144,6 +154,23 @@ async function tryJoin(attempt: number, startedAt: number) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+
+    /**
+     * "There was no room for you" is not "the server is unreachable".
+     *
+     * The first is a decision the server has already made and will keep
+     * making for as long as it is busy, so retrying four times only spends
+     * eight seconds arriving at the same answer — during which the player
+     * is falling through a sky wondering why nothing has happened. Give up
+     * immediately and let the solo session start on time.
+     */
+    const code = (err as { code?: number } | null)?.code;
+    if (code === SKY_FULL) {
+      connection.status = "solo";
+      connection.error = null;
+      joining = false;
+      return;
+    }
 
     if (attempt + 1 < MAX_ATTEMPTS) {
       window.setTimeout(

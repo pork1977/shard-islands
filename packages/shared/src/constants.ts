@@ -201,3 +201,15 @@ export const INTERACTION_RADII = {
 export const ROOM = {
   maxPlayers: 24,
 } as const;
+
+/**
+ * The join was refused because the machine is full, not because anything
+ * broke.
+ *
+ * Shared for the same reason the seat colours are: the client has to tell
+ * "there was no room for you" apart from "the server is unreachable", and
+ * it does completely different things with each — the first is final and
+ * should drop straight into a solo flight, the second is worth retrying.
+ * A number agreed in two places is a number that will disagree.
+ */
+export const SKY_FULL = 4200;

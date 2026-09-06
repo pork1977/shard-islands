@@ -25,6 +25,11 @@ primary_region = "iad"
 
 [env]
   PORT = "2567"
+  # The point past which new arrivals are turned away and fly solo rather
+  # than everyone's tick rate collapsing. Re-run roomLoadCheck after any
+  # change to the machine or to the physics, and set this from the number
+  # it gives rather than from optimism.
+  MAX_CONCURRENT = "64"
   # ALLOWED_ORIGINS is deliberately NOT here. It is set with `fly secrets
   # set`, so that changing where the game is served from does not require a
   # code change, and so an unset value is visible as a warning in the logs
@@ -73,9 +78,17 @@ primary_region = "iad"
     path = "/health"
 
 [[vm]]
-  # 512MB rather than 256. The room holds every player's trail — up to 350
-  # points each, 24 players to a room, several rooms to a machine — and the
-  # difference in cost is about a pound a month against a silent restart
-  # when a busy machine runs out of headroom.
-  size = "shared-cpu-1x"
-  memory = "512mb"
+  # THIS MUST MATCH THE RUNNING MACHINE. `fly deploy` applies whatever is
+  # written here, so a stale size here silently resizes production on the
+  # next deploy — which, on a launch day, is the worst possible moment to
+  # find out.
+  #
+  # performance-1x is a DEDICATED core; shared-cpu-Nx gives more cores that
+  # a single-threaded Node process cannot use, and Fly throttles shared CPU
+  # to a fraction of a core once its burst balance is spent. Worth knowing:
+  # measured against production, the dedicated core bought far less than
+  # expected (17.32 → 18.12 Hz at 48 craft, and the collapse point barely
+  # moved), because the ceiling is the cost of the physics rather than the
+  # hardware. See MAX_CONCURRENT below and roomLoadCheck.ts.
+  size = "performance-1x"
+  memory = "2048mb"
