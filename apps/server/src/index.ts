@@ -51,21 +51,32 @@ function originAllowed(origin: string | undefined): boolean {
 }
 
 const httpServer = createServer((req, res) => {
-  // A plain health endpoint, so a host can tell the process is alive.
-  // Anything else is deliberately left alone: Colyseus attaches its own
-  // request listener to this same server for matchmaking, and a catch-all
-  // 404 here answers those requests first and makes the room unjoinable.
-  if (req.url === "/health") {
+  // Exactly two paths are answered here, and everything else is left
+  // untouched on purpose: Colyseus attaches its OWN request listener to
+  // this same server for matchmaking, and a catch-all in here answers
+  // those first and makes the room unjoinable. That was a real outage
+  // once.
+  //
+  // "Left untouched" used to mean "not answered at all", which turned out
+  // to be its own bug: a request for any other path simply hung until the
+  // caller gave up. Fly's post-deploy check asks for "/", so a perfectly
+  // healthy server reported itself broken fifty-three times in a row. The
+  // root is now answered too — briefly, and by name, because a person who
+  // pastes this hostname into a browser deserves to be told what it is
+  // rather than watch a tab spin.
+  const path = req.url?.split("?")[0];
+
+  if (path === "/" || path === "/health") {
+    const body = {
+      ok: true,
+      service: "shard-islands realtime server",
+      uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
+      rooms: matchMaker.stats.local.roomCount,
+      players: matchMaker.stats.local.ccu,
+      originsLocked: allowedOrigins.length > 0,
+    };
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(
-      JSON.stringify({
-        ok: true,
-        uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
-        rooms: matchMaker.stats.local.roomCount,
-        players: matchMaker.stats.local.ccu,
-        originsLocked: allowedOrigins.length > 0,
-      }),
-    );
+    res.end(JSON.stringify(body));
   }
 });
 

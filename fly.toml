@@ -6,7 +6,7 @@
 # App name and region are set here rather than passed on the command line so
 # that a deploy is the same deploy whoever runs it.
 
-app = "shard-islands-server"
+app = "shard-islands"
 
 # US East. A Colyseus room lives in ONE process on ONE machine, so a second
 # region would be a second WORLD, not a faster route to this one — players

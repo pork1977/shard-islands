@@ -27,22 +27,37 @@ the only authority and it changes.
 
 **A Vercel account.** The free Hobby tier covers this frontend.
 
-**A GitHub repository.** This repo has no remote yet. Vercel can deploy from
-the CLI instead, but connecting a repository is what gives you preview
-deployments and a deploy on every push.
+**A GitHub repository.** Already done — <https://github.com/pork1977/shard-islands>,
+private. Both Fly and Vercel deploy from it, and both redeploy on a push to
+`master`.
 
 ---
 
 ## 1. The realtime server
 
+Either connect the repository in the Fly dashboard ("Launch an App from
+GitHub"), or from the CLI:
+
 ```bash
 fly auth login
-fly apps create shard-islands-server
+fly apps create shard-islands
 fly deploy
 ```
 
 `fly deploy` builds the image on Fly's own builders, so you do **not** need
 Docker installed locally.
+
+**If you use the dashboard launcher, check the config it generates.** It
+writes its own `fly.toml` from the form rather than using the one committed
+here, and a generated config without an `[http_service]` block means Fly
+never allocates a public IP — the deploy reports success, and the hostname
+resolves to no address at all. `fly ips list` shows the truth in one line:
+
+```bash
+fly ips list                       # empty means nothing is reachable
+fly ips allocate-v4 --shared       # free
+fly ips allocate-v6
+```
 
 `fly.toml` is committed and already sets the region (`iad`, US East), the
 machine size, the health check and the connection limits. Change
@@ -52,7 +67,7 @@ file about why there is only one.
 Check it came up:
 
 ```bash
-curl https://shard-islands-server.fly.dev/health
+curl https://shard-islands.fly.dev/health
 ```
 
 ```json
@@ -71,7 +86,7 @@ its own; the only thing it cannot guess is where the game server lives.
 Set one environment variable, for **all** environments:
 
 ```
-NEXT_PUBLIC_GAME_SERVER_URL = wss://shard-islands-server.fly.dev
+NEXT_PUBLIC_GAME_SERVER_URL = wss://shard-islands.fly.dev
 ```
 
 `wss://`, not `ws://`. A page served over HTTPS cannot open an insecure
@@ -103,7 +118,7 @@ domain sends its own Origin and would otherwise be refused.
 Setting a secret restarts the machine. Confirm:
 
 ```bash
-curl https://shard-islands-server.fly.dev/health   # originsLocked: true
+curl https://shard-islands.fly.dev/health   # originsLocked: true
 ```
 
 **Do not add `*.vercel.app` to the production server.** It would trust every
