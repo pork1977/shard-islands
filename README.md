@@ -1,5 +1,7 @@
 # Shard Islands
 
+**Playing at [www.shardisland.me](https://www.shardisland.me)**
+
 A frosted glass floor with one glowing handprint on it. No text, no buttons,
 nothing to read. Press it and the pane shatters — real Voronoi shard
 geometry, not a CSS trick — the camera falls through the hole, and about

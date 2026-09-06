@@ -111,6 +111,23 @@ if you attach one.
 
 ---
 
+## Domains in play
+
+| | |
+|---|---|
+| `www.shardisland.me` | **the one that serves the game** |
+| `shardisland.me` | 308 redirect to www |
+| `www.shardislands.me`, `shardislands.me` | the plural spelling, same project |
+| `shard-islands.vercel.app` | Vercel's own, still live |
+
+**The apex redirects to `www`, so `www` is the origin a browser actually
+sends.** That is the one the allowlist must contain. Listing only the apex
+would give a site that loads perfectly and leaves every player alone in the
+sky — the redirect happens before the game ever opens a socket, so by the
+time it does, the page came from `www`.
+
+Both spellings are listed, so it does not matter which one anybody types.
+
 ## 3. Lock the origins
 
 This is the step that is easy to skip and should not be. Until it is done,
@@ -118,7 +135,7 @@ any website can point its traffic at your server and run their game on your
 bill.
 
 ```bash
-fly secrets set ALLOWED_ORIGINS="https://shard-islands.vercel.app"
+fly secrets set ALLOWED_ORIGINS="https://www.shardisland.me,https://shardisland.me,https://www.shardislands.me,https://shardislands.me,https://shard-islands.vercel.app"
 ```
 
 Use the real domain from step 2. Several are allowed, comma-separated — list
@@ -129,6 +146,21 @@ Setting a secret restarts the machine. Confirm:
 
 ```bash
 curl https://shard-islands.fly.dev/health   # originsLocked: true
+```
+
+### A new domain resolves for the world before it resolves for you
+
+A freshly registered domain that was looked up before it existed leaves a
+cached NXDOMAIN in whichever resolver was asked, and a negative cache has
+to expire on its own — `ipconfig /flushdns` clears the machine but not the
+resolver upstream of it. So the site can be live and correct everywhere and
+still be unreachable from the one desk that has been checking on it.
+
+Test with a resolver that was never asked too early:
+
+```bash
+nslookup www.shardisland.me 1.1.1.1
+curl -I --resolve www.shardisland.me:443:<that IP> https://www.shardisland.me/
 ```
 
 **Do not add `*.vercel.app` to the production server.** It would trust every
