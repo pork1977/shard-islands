@@ -22,6 +22,38 @@ export interface Mechanic {
 /** The one sentence that was missing. Everything else is detail. */
 export const THE_POINT = "Your glowing trail is your score. Longest trail wins.";
 
+/**
+ * Why anybody would give money to a free game.
+ *
+ * A bare "donate" link is furniture — people's eyes go over it the way they
+ * go over a cookie banner. What converts is a reason, and the reason has to
+ * be both true and small: there is a machine in Virginia running the world
+ * you were just flying in, and one person pays for it. That is the entire
+ * pitch. No tiers, no perks, no "unlock", because the moment money buys
+ * something in here the game acquires a shape it was never designed to
+ * have — and the front page stops being able to say "free, no sign-up".
+ *
+ * It lives behind the question mark and nowhere else. Not on the glass,
+ * which has no text at all, and not on screen during a flight, where the
+ * only thing worth putting in front of somebody who has just done well is
+ * the share button.
+ */
+export const SUPPORT = {
+  /**
+   * Empty means the whole block renders nothing.
+   *
+   * A donate link that 404s is worse than no donate link, so this stays
+   * blank until there is a real page on the other end of it. Fill it in and
+   * the panel grows a footer; leave it and nothing anywhere changes.
+   */
+  url: "",
+  title: "Keep it in the air",
+  why:
+    "No ads, no accounts, nothing to buy — but there is a server behind this " +
+    "and somebody pays for it. If you had a good flight, you can chip in.",
+  action: "Buy me a coffee",
+};
+
 export const CONTROLS: Mechanic[] = [
   { name: "Fly", keys: "W A S D", what: "steer. Drag the mouse to look around without turning" },
   { name: "Boost", keys: "shift", what: "faster, and louder" },

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useGameStore } from "@/lib/store/useGameStore";
-import { CONTROLS, MECHANICS, THE_POINT } from "@/lib/world/howToPlay";
+import { CONTROLS, MECHANICS, SUPPORT, THE_POINT } from "@/lib/world/howToPlay";
 
 const SEEN_KEY = "shard-islands:seen-help";
 
@@ -165,6 +165,57 @@ export default function HowToPlay() {
                 <Row key={m.name} name={m.name} what={m.what} />
               ))}
             </Section>
+
+            {/* Only if there is somewhere to send them. */}
+            {SUPPORT.url !== "" && (
+              <div
+                style={{
+                  marginTop: 18,
+                  paddingTop: 13,
+                  borderTop: "1px solid rgba(255,255,255,0.1)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    letterSpacing: 0.3,
+                    color: "#cfe9ff",
+                  }}
+                >
+                  {SUPPORT.title}
+                </div>
+                <div
+                  style={{
+                    marginTop: 3,
+                    fontSize: 12,
+                    lineHeight: 1.55,
+                    color: "rgba(255,255,255,0.5)",
+                  }}
+                >
+                  {SUPPORT.why}
+                </div>
+                <a
+                  href={SUPPORT.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: "inline-block",
+                    marginTop: 9,
+                    padding: "5px 11px",
+                    borderRadius: 7,
+                    fontSize: 12,
+                    letterSpacing: 0.4,
+                    textDecoration: "none",
+                    color: "rgba(255,225,170,0.95)",
+                    background: "rgba(255,196,90,0.1)",
+                    border: "1px solid rgba(255,205,120,0.35)",
+                  }}
+                >
+                  {SUPPORT.action} →
+                </a>
+              </div>
+            )}
 
             <button
               onClick={() => setOpen(false)}
