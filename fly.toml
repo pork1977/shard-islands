@@ -1,0 +1,67 @@
+# Fly.io configuration for the realtime server.
+#
+# Deployed from the repository root:
+#   fly deploy
+#
+# App name and region are set here rather than passed on the command line so
+# that a deploy is the same deploy whoever runs it.
+
+app = "shard-islands-server"
+
+# US East. A Colyseus room lives in ONE process on ONE machine, so a second
+# region would be a second WORLD, not a faster route to this one — players
+# in it would be alone. One region is therefore a decision about where the
+# players are, not about latency, and a launch aimed at Product Hunt is
+# aimed at North America.
+#
+# The prediction and interpolation layers exist precisely so that the
+# distance costs the pilot nothing they can feel: their own craft answers
+# the stick instantly, and everyone else is rendered 100ms in the past
+# whether they are ten milliseconds away or a hundred.
+primary_region = "iad"
+
+[build]
+  dockerfile = "apps/server/Dockerfile"
+
+[env]
+  PORT = "2567"
+  # ALLOWED_ORIGINS is deliberately NOT here. It is set with `fly secrets
+  # set`, so that changing where the game is served from does not require a
+  # code change, and so an unset value is visible as a warning in the logs
+  # rather than hidden in a committed file.
+
+[http_service]
+  internal_port = 2567
+  force_https = true
+  # A game server holds every player's socket open. Stopping the machine
+  # when it looks idle would disconnect anybody mid-flight and add a cold
+  # start to the next arrival — and "no visible connecting delay, ever" is
+  # the one constraint this project is not allowed to break.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    # Connections, not requests: every player is one long-lived socket, so
+    # request-based limits would read as almost no load at all.
+    type = "connections"
+    # The room caps itself at 24, and one machine can host several rooms.
+    # These are the numbers at which Fly should stop sending new arrivals
+    # here, not a cap on the game.
+    soft_limit = 180
+    hard_limit = 240
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "15s"
+    method = "GET"
+    timeout = "3s"
+    path = "/health"
+
+[[vm]]
+  # 512MB rather than 256. The room holds every player's trail — up to 350
+  # points each, 24 players to a room, several rooms to a machine — and the
+  # difference in cost is about a pound a month against a silent restart
+  # when a busy machine runs out of headroom.
+  size = "shared-cpu-1x"
+  memory = "512mb"
