@@ -59,6 +59,16 @@ fly ips allocate-v4 --shared       # free
 fly ips allocate-v6
 ```
 
+**And check the machine count.** The launcher created two, both healthy,
+both passing checks — and that quietly breaks the game. A Colyseus room
+lives in one process, so two machines are two worlds and players balanced
+onto different ones cannot see each other:
+
+```bash
+fly status                         # one machine under Machines, not two
+fly scale count 1
+```
+
 `fly.toml` is committed and already sets the region (`iad`, US East), the
 machine size, the health check and the connection limits. Change
 `primary_region` there if you want it somewhere else — see the note in the

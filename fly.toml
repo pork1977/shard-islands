@@ -41,6 +41,20 @@ primary_region = "iad"
   auto_start_machines = true
   min_machines_running = 1
 
+  # EXACTLY ONE MACHINE. Not a cost decision — a correctness one.
+  #
+  # A Colyseus room lives in one process, and this server runs the default
+  # local presence and matchmaking drivers, so a second machine is a second
+  # set of rooms that knows nothing about the first. Two players balanced
+  # onto different machines would be in different worlds, each convinced
+  # they were alone, with nothing in the game to suggest why.
+  #
+  # The launcher created two and it looked perfectly healthy: both machines
+  # up, both health checks passing. `fly scale count 1` is what fixed it.
+  #
+  # Lifting this needs shared presence (Redis) and a matchmaking driver
+  # behind it, not just a bigger number here.
+
   [http_service.concurrency]
     # Connections, not requests: every player is one long-lived socket, so
     # request-based limits would read as almost no load at all.
