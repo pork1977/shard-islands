@@ -22,7 +22,7 @@ import { CRACK_RAYS } from "../lib/fracture/crackLook";
 
 const W = 900;
 const H = 520;
-const STEPS = [0.12, 0.25, 0.45, 0.7, 1.0];
+const STEPS = [0.08, 0.18, 0.35, 0.55, 0.75, 1.0];
 
 /**
  * MIRROR of shardCrackTime in shaders/shardGlass.ts.
@@ -37,8 +37,10 @@ function crackTime(dist: number, angle: number, rnd: number): number {
   lateral *= lateral;
 
   const d = Math.max(0, Math.min(1, dist));
-  const t = d * (0.45 + 0.55 * lateral) + lateral * 0.3;
-  return Math.max(0, Math.min(1, t / 1.3 + (rnd - 0.5) * 0.05));
+  const spear = d * 0.16;
+  const fill = 0.3 + 0.7 * Math.pow(d, 0.75);
+  const t = spear + (fill - spear) * lateral;
+  return Math.max(0, Math.min(1, t + (rnd - 0.5) * 0.13));
 }
 
 const pattern = generateVoronoiCells({

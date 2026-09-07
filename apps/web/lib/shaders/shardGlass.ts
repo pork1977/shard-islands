@@ -89,13 +89,22 @@ export const ShardGlassMaterial = shaderMaterial(
       lateral *= lateral;
 
       float d = clamp(dist, 0.0, 1.0);
-      // Along a ray: straight out, quickly. Between them: wait for a branch,
-      // then cross. The constant is that wait.
-      float t = d * (0.45 + 0.55 * lateral) + lateral * 0.30;
 
-      // 1.30 is the worst case above (d = 1, lateral = 1), so the last shard
-      // to go lands on 1.0 and the pane is fully cracked exactly on time.
-      return clamp(t / 1.30 + (rnd - 0.5) * 0.05, 0.0, 1.0);
+      // TWO PHASES, deliberately separated rather than blended into one
+      // sweep. Blended, the pane came apart as travelling wedges — better
+      // than rings, still plainly a pattern being drawn.
+      //
+      // The spears go first and are over almost before they register: a
+      // handful of cracks to the frame inside the opening sixth. Then a
+      // beat where nothing much moves. Then the plates between them let go,
+      // outward from the strike, slowly enough to watch.
+      float spear = d * 0.16;
+      float fill = 0.30 + 0.70 * pow(d, 0.75);
+      float t = mix(spear, fill, lateral);
+
+      // Coarse per-shard noise, which is what stops the fill arriving as a
+      // clean front. Neighbouring plates should not agree with each other.
+      return clamp(t + (rnd - 0.5) * 0.13, 0.0, 1.0);
     }
 
     // Rodrigues rotation — each shard tumbles about its own centre.

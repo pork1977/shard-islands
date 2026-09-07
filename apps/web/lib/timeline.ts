@@ -6,14 +6,25 @@
  * and duplicating these numbers in two files guarantees they drift apart.
  */
 
-/** Time for the fracture to travel from the strike to the pane edges. */
-export const CRACK_DURATION = 2.1;
+/**
+ * Time for the fracture to travel from the strike to the pane edges.
+ *
+ * Slower than it was. At 2.1s the whole pane had gone before a first-time
+ * player had finished registering that anything happened — the point of
+ * this sequence is the moment somebody thinks "hang on, what IS that", and
+ * that moment needs room to arrive. The spears still snap out instantly;
+ * it is the spread afterwards that is given time to be watched.
+ */
+export const CRACK_DURATION = 3.2;
 
 /**
  * A beat of held tension after the pane is fully cracked but before it lets
  * go — the "it's going to fall, isn't it" moment.
+ *
+ * Longer too, for the same reason: the pause only works if it is long
+ * enough to be felt as a pause.
  */
-export const COLLAPSE_AT = CRACK_DURATION + 0.28;
+export const COLLAPSE_AT = CRACK_DURATION + 0.5;
 
 /** The camera starts falling just after the floor does, not with it. */
 export const PLUNGE_AT = COLLAPSE_AT + 0.12;
