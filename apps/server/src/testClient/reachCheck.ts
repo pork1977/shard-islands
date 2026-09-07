@@ -18,8 +18,9 @@ import {
  *   pnpm --filter server exec tsx src/testClient/reachCheck.ts
  */
 
+/** Chebyshev, matching how the boundary measures it: the map is a square. */
 const furthest = (pts: { x: number; y: number }[]) =>
-  Math.max(...pts.map((p) => Math.hypot(p.x, p.y)));
+  Math.max(...pts.map((p) => Math.max(Math.abs(p.x), Math.abs(p.y))));
 
 const cores = furthest(coreSites());
 const rare = furthest(plumageSites());
@@ -33,6 +34,12 @@ console.log(`furthest rare node   ${rare.toFixed(0)}`);
 const checks: [string, boolean, string][] = [
   ["every core is in free airspace", cores <= BOUNDARY_SOFT, `${cores.toFixed(0)} vs ${BOUNDARY_SOFT.toFixed(0)}`],
   ["every rare node is too", rare <= BOUNDARY_SOFT, `${rare.toFixed(0)}`],
+  [
+    "you can reach a corner, not just an axis",
+    // A circular boundary of the same number would stop you 664m short here.
+    Math.hypot(BOUNDARY_HARD, BOUNDARY_HARD) > TERRAIN_SIZE / 2,
+    `corner reach ${Math.hypot(BOUNDARY_HARD, BOUNDARY_HARD).toFixed(0)}`,
+  ],
   [
     "the hard edge stays on the mesh",
     BOUNDARY_HARD < TERRAIN_SIZE / 2,

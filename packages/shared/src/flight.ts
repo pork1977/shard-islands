@@ -28,13 +28,16 @@ import {
  * turn-back band: reachable in principle, and in practice the game fought
  * you the whole way there.
  *
- * The soft edge now sits beyond the furthest core, so every collectable is
- * in free airspace, and the hard edge sits close enough to the rim to make
- * the map feel like the size it looks. The cost is that the edge of the
- * world is now somewhere you can actually get to and see.
+ * They are also measured as a SQUARE now, not a circle, because the terrain
+ * is a square: a 2800x2800 plane spanning 1400 metres each way. A circular
+ * boundary inscribed in it stops you 84 metres short along an axis and 664
+ * metres short toward a corner — which is why the edge still looked
+ * unreachable after the radius was widened. Comparing max(|x|, |y|) instead
+ * follows the shape of the ground, so the rim is the same distance away
+ * whichever way you fly at it.
  */
-export const BOUNDARY_SOFT = TERRAIN_SIZE * 0.42;
-export const BOUNDARY_HARD = TERRAIN_SIZE * 0.47;
+export const BOUNDARY_SOFT = TERRAIN_SIZE * 0.44;
+export const BOUNDARY_HARD = TERRAIN_SIZE * 0.477;
 /** Enough headroom to climb without leaving the world behind. */
 export const CEILING = FLIGHT_ALTITUDE + 120;
 /** How far the craft floats above the ground it is skimming. */
@@ -286,7 +289,9 @@ export function stepFlight(s: FlightSim, input: FlightInput, dt: number): void {
   // Keep the player inside the map. Beyond the edge there is nothing to look
   // at, and turning back leaves the world a long way off — so the boundary
   // curves them round rather than letting them leave.
-  const distFromCentre = Math.hypot(s.x, s.y);
+  // Chebyshev distance — the square the terrain actually is, rather than the
+  // circle that fits inside it.
+  const distFromCentre = Math.max(Math.abs(s.x), Math.abs(s.y));
   if (distFromCentre > BOUNDARY_SOFT) {
     const over = Math.min(
       1,

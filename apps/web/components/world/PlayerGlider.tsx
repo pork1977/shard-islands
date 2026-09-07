@@ -63,11 +63,18 @@ export default function PlayerGlider() {
   const lookTarget = useMemo(() => new THREE.Vector3(), []);
   const lookAt = useMemo(() => new THREE.Vector3(), []);
   const boom = useMemo(() => new THREE.Vector3(), []);
+  const craftPos = useMemo(() => new THREE.Vector3(), []);
   const zoomShown = useRef(1);
   /** Rare form currently applied, so the uniforms are set on change only. */
   const wornRef = useRef(-1);
   /** Where the boom pointed last frame, in world space, while a view is held. */
   const heldBoom = useRef<THREE.Vector3 | null>(null);
+  /** Distance the orbit was taken hold of at, kept constant all the way round. */
+  const orbitRadius = useRef(7.5);
+  /** Where the camera was aimed when the view was grabbed, and how far it has
+   *  since eased onto the craft. */
+  const aimOffset = useRef<THREE.Vector3 | null>(null);
+  const aimEase = useRef(0);
   /** Last acknowledged input, so a snapshot is reconciled once, not per frame. */
   const lastAck = useRef(-1);
   /** Eased, so the downwash fades in and out rather than switching. */
@@ -204,6 +211,27 @@ export default function PlayerGlider() {
      * solved for directly — which is inverting the three lines below, needs
      * no signs guessed, and holds pitch as firmly as it holds yaw.
      */
+    /**
+     * Taking hold of the view must not move it.
+     *
+     * The orbit used to be defined from scratch — a radius derived from the
+     * chase distance and an aim on the craft — so the instant the mouse went
+     * down both jumped away from where the camera actually was, and the
+     * craft appeared to hop. The orbit is therefore adopted FROM the current
+     * pose instead: whatever radius the camera is at, whatever it is looking
+     * at, that is where the orbit starts.
+     */
+    if (inp.freeLook && !heldBoom.current) {
+      craftPos.set(p.position[0], p.position[1], p.position[2]);
+      const offset = new THREE.Vector3().copy(state.camera.position).sub(craftPos);
+      orbitRadius.current = Math.max(0.5, offset.length());
+      heldBoom.current = offset.normalize();
+      // Where it is pointed right now, which then eases onto the craft
+      // rather than snapping there.
+      aimOffset.current = new THREE.Vector3().copy(lookAt).sub(craftPos);
+      aimEase.current = 0;
+    }
+
     if (inp.freeLook && heldBoom.current) {
       const held = heldBoom.current;
       inp.lookPitch = Math.asin(THREE.MathUtils.clamp(held.dot(up), -1, 1));
@@ -252,6 +280,8 @@ export default function PlayerGlider() {
       heldBoom.current = (heldBoom.current ?? new THREE.Vector3()).copy(boom);
     } else {
       heldBoom.current = null;
+      aimOffset.current = null;
+      aimEase.current = 0;
     }
 
     // wheel zoom, eased so a flick of the wheel does not snap the camera
@@ -276,13 +306,20 @@ export default function PlayerGlider() {
        * grabbing the mouse does not jump the camera in or out — it just
        * stops the distance changing as you go round.
        */
-      const radius = Math.hypot(dist, 2.3 * zoomShown.current);
       camTarget
         .set(p.position[0], p.position[1], p.position[2])
-        .addScaledVector(boom, radius);
-      // The craft itself, not a point ahead of its nose. Anything offset
-      // from the craft is a second centre for the orbit to swing around.
+        .addScaledVector(boom, orbitRadius.current);
+
+      // The aim settles ONTO the craft over half a second rather than
+      // arriving there. Anything offset from the craft is a second centre
+      // for the orbit to swing around, so it has to end up centred — but
+      // moving it there in one frame is the hop this was meant to remove.
+      aimEase.current = Math.min(1, aimEase.current + dt / 0.5);
+      const ease = aimEase.current * aimEase.current * (3 - 2 * aimEase.current);
       lookTarget.set(p.position[0], p.position[1], p.position[2]);
+      if (aimOffset.current) {
+        lookTarget.addScaledVector(aimOffset.current, 1 - ease);
+      }
     } else {
       camTarget
         .set(p.position[0], p.position[1], p.position[2])
