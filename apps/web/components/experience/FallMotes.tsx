@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef } from "react";
+import { PLUNGE_AT } from "@/lib/timeline";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { createFallMotes, fallRun, setFallRun } from "@/lib/world/fallMotes";
@@ -26,6 +27,7 @@ const RING_RADIUS = 43;
 
 export default function FallMotes() {
   const impact = useGameStore((s) => s.impact);
+  const strikeAt = useGameStore((s) => s.strikeAt);
 
   // Built here rather than in the descent controller so the instance count
   // is known on the first render. The controller only ever reads the live
@@ -147,12 +149,31 @@ export default function FallMotes() {
 
     const breathe = 1 + Math.sin(now * 3.1) * 0.05;
 
+    /**
+     * The marker belongs to the fall, not to the pane.
+     *
+     * It draws with depth testing off so that no hill can cut it in half —
+     * which also means it drew straight through the glass, and was sitting
+     * on the floor as a bright cyan ring while the pane was still cracking.
+     * There is nothing to aim at yet at that point: the player has not been
+     * let go of.
+     *
+     * So it does not exist until the floor does not either, and then fades
+     * up rather than appearing.
+     */
+    const sinceStrike = (performance.now() - strikeAt) / 1000;
+    const reveal = Math.max(0, Math.min(1, (sinceStrike - PLUNGE_AT) / 0.7));
+
     if (ringRef.current) {
+      ringRef.current.visible = reveal > 0;
+      (ringRef.current.material as THREE.MeshBasicMaterial).opacity = 0.5 * reveal;
       ringRef.current.position.set(lx, ly, ground + 1.5);
       ringRef.current.rotation.z = now * 0.35;
       ringRef.current.scale.setScalar(breathe);
     }
     if (discRef.current) {
+      discRef.current.visible = reveal > 0;
+      (discRef.current.material as THREE.MeshBasicMaterial).opacity = 0.11 * reveal;
       discRef.current.position.set(lx, ly, ground + 1.2);
       discRef.current.scale.setScalar(breathe);
     }

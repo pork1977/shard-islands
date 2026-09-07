@@ -66,8 +66,8 @@ export default function PlayerGlider() {
   const zoomShown = useRef(1);
   /** Rare form currently applied, so the uniforms are set on change only. */
   const wornRef = useRef(-1);
-  /** Craft heading last frame, to cancel it out of a held view. */
-  const lastCraftYaw = useRef<number | null>(null);
+  /** Where the boom pointed last frame, in world space, while a view is held. */
+  const heldBoom = useRef<THREE.Vector3 | null>(null);
   /** Last acknowledged input, so a snapshot is reconciled once, not per frame. */
   const lastAck = useRef(-1);
   /** Eased, so the downwash fades in and out rather than switching. */
@@ -190,25 +190,25 @@ export default function PlayerGlider() {
     // Free-look orbits the camera about the craft without touching where it
     // is heading — the boom swings round, the flight path does not change.
     /**
-     * Hold the view still while the craft turns under it.
+     * While a view is held, the world does not move. At all.
      *
-     * lookYaw is an offset from the craft's own heading, so the boom's world
-     * direction works out to (craftYaw - lookYaw). Left alone, steering
-     * during a free-look drags the whole view round with the nose — which is
-     * exactly what you do NOT want when you are holding the camera on
-     * something and turning to line up on it.
+     * lookYaw and lookPitch are offsets from the CRAFT's own basis, so they
+     * turn with it: steering during a free-look dragged the whole view round
+     * with the nose, and pitching took it up and down as well.
      *
-     * Cancelling it is therefore one subtraction: add the craft's own change
-     * in heading to the offset, and the difference — the direction the
-     * camera is actually pointed — stays put.
+     * Cancelling that by adding back the craft's change in heading works for
+     * yaw and gets fiddly for pitch, where the sign depends on how the basis
+     * was built. So it is not done by arithmetic on the deltas at all. The
+     * boom's WORLD direction is remembered from the previous frame, and the
+     * offsets that reproduce that exact direction against the new basis are
+     * solved for directly — which is inverting the three lines below, needs
+     * no signs guessed, and holds pitch as firmly as it holds yaw.
      */
-    if (inp.freeLook && lastCraftYaw.current !== null) {
-      let d = p.yaw - lastCraftYaw.current;
-      while (d > Math.PI) d -= Math.PI * 2;
-      while (d < -Math.PI) d += Math.PI * 2;
-      inp.lookYaw += d;
+    if (inp.freeLook && heldBoom.current) {
+      const held = heldBoom.current;
+      inp.lookPitch = Math.asin(THREE.MathUtils.clamp(held.dot(up), -1, 1));
+      inp.lookYaw = Math.atan2(-held.dot(right), -held.dot(forward));
     }
-    lastCraftYaw.current = p.yaw;
 
     const ly = inp.lookYaw;
     const lp = inp.lookPitch;
@@ -219,6 +219,14 @@ export default function PlayerGlider() {
       .addScaledVector(right, -cosP * Math.sin(ly))
       .addScaledVector(up, Math.sin(lp))
       .normalize();
+
+    // Remember where it ended up, so the next frame can put it back there
+    // however much the craft has rotated in between.
+    if (inp.freeLook) {
+      heldBoom.current = (heldBoom.current ?? new THREE.Vector3()).copy(boom);
+    } else {
+      heldBoom.current = null;
+    }
 
     // wheel zoom, eased so a flick of the wheel does not snap the camera
     zoomShown.current += (inp.zoom - zoomShown.current) * Math.min(1, dt * 6);

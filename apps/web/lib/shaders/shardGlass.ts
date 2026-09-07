@@ -242,17 +242,28 @@ export const ShardGlassMaterial = shaderMaterial(
       // silver-white, per-crack varied. Near-white rather than cyan: the tint
       // was what gave the whole pane a neon, decorative cast.
       vec3 silver = vec3(0.86, 0.93, 1.0);
-      col += silver * lip * (0.22 + vRandom.x * 0.3) * (0.4 + 0.7 * exp(-vDist * 1.4));
+      // Halved, and then some.
+      //
+      // Every crack carried a bright lip for as long as it existed, so by the
+      // time the pane was fully cracked the whole floor was a lit web — a
+      // light show rather than broken glass. What a crack actually is, once
+      // it has stopped travelling, is a hairline you can barely see.
+      //
+      // The drama moves into vFlash below instead: bright at the instant a
+      // piece lets go, gone a moment later. Transient loud, permanent quiet.
+      col += silver * lip * (0.09 + vRandom.x * 0.14) * (0.35 + 0.5 * exp(-vDist * 2.2));
 
       // colour only survives right at the strike, where the world beneath
       // starts showing through
-      col += uGlowColor * (lip + core * 0.5) * exp(-vDist * 5.5) * 0.9;
+      col += uGlowColor * (lip + core * 0.5) * exp(-vDist * 5.5) * 0.4;
 
       // the white-hot instant of this piece letting go
-      col += silver * (lip + core) * vFlash * 1.4;
+      // Raised as the standing glow came down: this is the only moment a
+      // crack should be loud, and it is over in about a tenth of a second.
+      col += silver * (lip + core) * vFlash * 2.1;
 
       // pulverised core at the strike, where glass is crushed not cleanly split
-      col += uGlowColor * exp(-vDist * 26.0) * 0.9 * vCracked;
+      col += uGlowColor * exp(-vDist * 26.0) * 0.45 * vCracked;
 
       // exposed cut faces glow along their thickness
       float side = 1.0 - step(0.5, abs(vNormal.z));

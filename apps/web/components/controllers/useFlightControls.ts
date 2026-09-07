@@ -79,6 +79,8 @@ export function useFlightControls(): React.RefObject<FlightInput> {
     const drag = {
       active: false,
       steering: false,
+      lastX: 0,
+      lastY: 0,
       originX: 0,
       originY: 0,
       baseYaw: 0,
@@ -100,6 +102,8 @@ export function useFlightControls(): React.RefObject<FlightInput> {
       drag.steering = e.pointerType !== "mouse";
       drag.originX = e.clientX;
       drag.originY = e.clientY;
+      drag.lastX = e.clientX;
+      drag.lastY = e.clientY;
       drag.baseYaw = input.current.lookYaw;
       drag.basePitch = input.current.lookPitch;
       // Mouse drags hold a view; touch drags steer, and must not.
@@ -116,13 +120,27 @@ export function useFlightControls(): React.RefObject<FlightInput> {
         input.current.turn = clamp(dx / r, -1, 1);
         input.current.pitch = clamp(dy / r, -1, 1);
       } else {
+        // Accumulated from the last event rather than measured from the drag
+        // origin. While a view is being held the frame loop rewrites these
+        // every frame to cancel the craft's own rotation, and an absolute
+        // "origin plus delta" would discard that correction on the next
+        // mouse move — the view would jump back the moment you nudged it.
+        const stepX = e.clientX - drag.lastX;
+        const stepY = e.clientY - drag.lastY;
+        drag.lastX = e.clientX;
+        drag.lastY = e.clientY;
+
         // Yaw is deliberately UNCLAMPED so the camera can swing the whole way
         // round the craft; a limit near half a turn makes it feel like it has
         // hit a wall just as you go to look behind you.
-        input.current.lookYaw = drag.baseYaw - dx * 0.005;
+        input.current.lookYaw -= stepX * 0.005;
         // inverted: pushing the mouse up swings the camera up over the craft.
         // pitch stays limited, or the camera tumbles over the top
-        input.current.lookPitch = clamp(drag.basePitch + dy * 0.004, -1.15, 1.15);
+        input.current.lookPitch = clamp(
+          input.current.lookPitch + stepY * 0.004,
+          -1.15,
+          1.15,
+        );
       }
     };
 
