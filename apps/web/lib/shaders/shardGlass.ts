@@ -1,4 +1,5 @@
 import { shaderMaterial } from "@react-three/drei";
+import { CRACK_RAYS } from "@/lib/fracture/crackLook";
 import * as THREE from "three";
 import {
   GLASS_HELPERS_GLSL,
@@ -60,18 +61,41 @@ export const ShardGlassMaterial = shaderMaterial(
     //
     // The burst quantisation stays — glass does go in steps rather than one
     // smooth sweep — but each burst is now an irregular blob rather than a ring.
+    /**
+     * When each shard cracks, as a fraction of the fracture's duration.
+     *
+     * This used to be a function of DISTANCE, quantised into nine steps —
+     * so every shard in a radius band let go on the same frame and the pane
+     * came apart as nine expanding rings. That reads as a ripple in a pond,
+     * which is the one thing an impact fracture does not look like.
+     *
+     * Real glass does not advance as a front. A few cracks run almost
+     * straight to the edge in the first instants, and everything between
+     * them waits for a branch to arrive and cross it. So time is now mostly
+     * a function of ANGLE: near one of the major rays a crack travels at
+     * better than twice the speed, and the plates between them go last.
+     *
+     * Nothing is quantised. The staggering that the bursts were faking now
+     * comes out of the geometry for free, and every shard gets its own
+     * instant — so the flash travels along the cracks instead of firing in
+     * rings.
+     */
     float shardCrackTime(float dist, float angle, float rnd) {
-      float dirBias =
-          sin(angle * 3.0 + 0.7) * 0.5
-        + sin(angle * 5.0 - 1.9) * 0.32
-        + sin(angle * 9.0 + 3.3) * 0.18;
+      // Irregularly spaced rays. Evenly spaced ones make a perfect star,
+      // which is the other way for this to look computed rather than broken.
+      float wobble = sin(angle * 2.0 + 1.1) * 0.20 + sin(angle * 3.0 - 0.7) * 0.12;
+      float lateral = abs(sin((angle + wobble) * ${CRACK_RAYS.toFixed(1)} * 0.5));
+      // Squared, so the fast lanes are narrow spears rather than broad wedges.
+      lateral *= lateral;
 
-      float base = pow(clamp(dist, 0.0, 1.0), 0.72);
-      float raw = base * (1.0 + dirBias * 0.38) + (rnd - 0.5) * 0.13;
-      raw = clamp(raw, 0.0, 1.0);
+      float d = clamp(dist, 0.0, 1.0);
+      // Along a ray: straight out, quickly. Between them: wait for a branch,
+      // then cross. The constant is that wait.
+      float t = d * (0.45 + 0.55 * lateral) + lateral * 0.30;
 
-      float bursts = 9.0;
-      return floor(raw * bursts) / bursts;
+      // 1.30 is the worst case above (d = 1, lateral = 1), so the last shard
+      // to go lands on 1.0 and the pane is fully cracked exactly on time.
+      return clamp(t / 1.30 + (rnd - 0.5) * 0.05, 0.0, 1.0);
     }
 
     // Rodrigues rotation — each shard tumbles about its own centre.

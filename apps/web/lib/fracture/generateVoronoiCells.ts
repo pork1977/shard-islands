@@ -1,4 +1,5 @@
 import { Delaunay } from "d3-delaunay";
+import { MAJOR_CRACKS_MAX, MAJOR_CRACKS_MIN } from "./crackLook";
 
 export interface FracturePattern {
   /** Convex polygons in pane-local space, wound CCW, first point not repeated. */
@@ -42,7 +43,7 @@ export function generateVoronoiCells({
   width,
   height,
   impact,
-  maxCells = 420,
+  maxCells = 460,
 }: Options): FracturePattern {
   const [ix, iy] = impact;
 
@@ -68,7 +69,9 @@ export function generateVoronoiCells({
   // forced explicitly — a pair of seed points straddling the ray puts a
   // Voronoi boundary exactly ON the ray, and chaining pairs outward along it
   // makes that boundary continuous for the full length of the crack.
-  const majorCount = 5 + Math.floor(Math.random() * 4);
+  const majorCount =
+    MAJOR_CRACKS_MIN +
+    Math.floor(Math.random() * (MAJOR_CRACKS_MAX - MAJOR_CRACKS_MIN + 1));
   const majorBase = Math.random() * Math.PI * 2;
 
   for (let m = 0; m < majorCount; m++) {
@@ -84,56 +87,57 @@ export function generateVoronoiCells({
 
     let r = maxRadius * 0.03;
     while (r < maxRadius * 1.2) {
-      const eps = r * 0.16;
+      const eps = r * 0.13;
       const cxp = ix + ux * r;
       const cyp = iy + uy * r;
       if (inPane(cxp, cyp)) {
         points.push([cxp + px * eps, cyp + py * eps]);
         points.push([cxp - px * eps, cyp - py * eps]);
       }
-      r *= 1.55;
+      // Close enough that the boundary between successive pairs stays on
+      // the ray, far enough apart that the rays do not themselves become a
+      // radial grid. At 1.32 they did exactly that.
+      r *= 1.46;
     }
   }
 
-  let spokes = 13;
-  let radius = maxRadius * 0.022;
-  const growth = 1.42;
-  let ring = 0;
+  // ---- the field between the cracks --------------------------------------
+  //
+  // Scattered, NOT a polar lattice.
+  //
+  // Rings of seeds were the original idea and they are the reason the pane
+  // read as a dartboard: seeds at a shared radius share arc-shaped
+  // boundaries, so however much they are jittered or interleaved, the eye
+  // still assembles them into circles. Widening the jitter only made the
+  // circles fuzzy, and staggering alternate rings turned the whole pane into
+  // a spider web.
+  //
+  // The long radial cracks no longer need the lattice: they are the majors
+  // above, explicit and a dozen or more of them. That frees this to be what
+  // impact fracture actually leaves between its cracks — irregular plates,
+  // small and dense at the strike, large and lazy toward the frame.
+  //
+  // Density falls off with radius by sampling r as a power of a uniform,
+  // which crowds seeds toward the impact without any structure at all.
+  const scatterTarget = Math.min(maxCells - points.length, 300);
+  let guard = 0;
+  while (points.length < maxCells && guard < scatterTarget * 40) {
+    guard++;
+    // 2.1 is the shape of the falloff: 1.0 would spread seeds evenly along
+    // the radius, and higher numbers pull them in toward the strike.
+    const r = maxRadius * 1.15 * Math.pow(Math.random(), 2.1);
+    const angle = Math.random() * Math.PI * 2;
+    const x = ix + Math.cos(angle) * r;
+    const y = iy + Math.sin(angle) * r;
+    if (inPane(x, y)) points.push([x, y]);
+  }
 
-  // ONE offset shared by every ring. Giving each ring its own random offset
-  // destroys the most important feature of impact fracture: long radial
-  // cracks spearing from the strike to the edge. Those exist because the
-  // radial cell boundaries of consecutive rings line up — which only happens
-  // if the rings share their spoke angles. Per-ring offsets produced a
-  // concentric doily instead.
-  const spokeOffset = Math.random() * Math.PI * 2;
-
-  while (radius < maxRadius * 1.15 && points.length < maxCells) {
-    // Widen the spoke count as rings grow, otherwise outer cells become
-    // absurdly long arcs. Doubling subdivides existing spokes rather than
-    // replacing them, so the original radial lines survive out to the edge.
-    if (ring > 0 && ring % 3 === 0) spokes *= 2;
-
-    const angleStep = (Math.PI * 2) / spokes;
-
-    for (let s = 0; s < spokes && points.length < maxCells; s++) {
-      // Angular jitter kept small — enough to look organic, not enough to
-      // break the radial alignment that makes the long cracks read.
-      const angleJitter = (Math.random() - 0.5) * angleStep * 0.12;
-      const radiusJitter = (Math.random() - 0.5) * radius * 0.42;
-
-      const angle = spokeOffset + s * angleStep + angleJitter;
-      const r = radius + radiusJitter;
-
-      const x = ix + Math.cos(angle) * r;
-      const y = iy + Math.sin(angle) * r;
-
-      // keep seeds a little outside the pane too, so edge cells close cleanly
-      if (inPane(x, y)) points.push([x, y]);
-    }
-
-    radius *= growth;
-    ring++;
+  // A thin uniform sprinkle as well, so the far corners are not one enormous
+  // plate each — the falloff above leaves them almost empty.
+  for (let i = 0; i < 26 && points.length < maxCells; i++) {
+    const x = (Math.random() - 0.5) * width * 1.15;
+    const y = (Math.random() - 0.5) * height * 1.15;
+    points.push([x, y]);
   }
 
   const delaunay = Delaunay.from(points);
