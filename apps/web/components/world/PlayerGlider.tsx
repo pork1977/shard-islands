@@ -68,6 +68,8 @@ export default function PlayerGlider() {
   const wornRef = useRef(-1);
   /** Where the boom pointed last frame, in world space, while a view is held. */
   const heldBoom = useRef<THREE.Vector3 | null>(null);
+  /** And the offset to what it is aimed at, for the same reason. */
+  const heldAim = useRef<THREE.Vector3 | null>(null);
   /** Last acknowledged input, so a snapshot is reconciled once, not per frame. */
   const lastAck = useRef(-1);
   /** Eased, so the downwash fades in and out rather than switching. */
@@ -210,6 +212,32 @@ export default function PlayerGlider() {
       inp.lookYaw = Math.atan2(-held.dot(right), -held.dot(forward));
     }
 
+    /**
+     * The drag itself, applied AFTER that and not before.
+     *
+     * Order is the whole of it. The solve above rewrites both offsets from
+     * where the camera was pointing last frame, so anything the mouse had
+     * already written into them was simply thrown away — the view was pinned
+     * to wherever the drag started and could not be moved at all.
+     *
+     * Cancel the craft's rotation first, then add what the player did.
+     */
+    if (inp.lookDeltaX !== 0 || inp.lookDeltaY !== 0) {
+      // Yaw is deliberately UNCLAMPED so the camera can swing the whole way
+      // round the craft; a limit near half a turn feels like hitting a wall
+      // just as you go to look behind you.
+      inp.lookYaw -= inp.lookDeltaX * 0.005;
+      // Inverted: pushing the mouse up swings the camera up over the craft.
+      // Pitch stays limited, or it tumbles over the top.
+      inp.lookPitch = THREE.MathUtils.clamp(
+        inp.lookPitch + inp.lookDeltaY * 0.004,
+        -1.15,
+        1.15,
+      );
+      inp.lookDeltaX = 0;
+      inp.lookDeltaY = 0;
+    }
+
     const ly = inp.lookYaw;
     const lp = inp.lookPitch;
     const cosP = Math.cos(lp);
@@ -236,9 +264,36 @@ export default function PlayerGlider() {
       .set(p.position[0], p.position[1], p.position[2])
       .addScaledVector(boom, dist)
       .addScaledVector(up, 2.3 * zoomShown.current);
-    lookTarget
-      .set(p.position[0], p.position[1], p.position[2])
-      .addScaledVector(forward, 9 * Math.max(0.15, Math.cos(ly)));
+    /**
+     * What the camera is aimed AT, which has to be held too.
+     *
+     * Holding the boom fixes where the camera stands; it does not fix where
+     * it points. The aim sits nine metres ahead of the NOSE, so a craft
+     * turning under a held view still swung the aim with it — the view was
+     * pinned in position and quietly rotating anyway, which measured as
+     * about nine degrees of residual against fifty-eight uncorrected.
+     *
+     * So the offset from craft to aim point is remembered in world space and
+     * reused, exactly as the boom is. Both ends of the shot then translate
+     * with the craft and neither rotates with it.
+     */
+    if (inp.freeLook && heldAim.current) {
+      lookTarget
+        .set(p.position[0], p.position[1], p.position[2])
+        .add(heldAim.current);
+    } else {
+      lookTarget
+        .set(p.position[0], p.position[1], p.position[2])
+        .addScaledVector(forward, 9 * Math.max(0.15, Math.cos(ly)));
+    }
+
+    if (inp.freeLook) {
+      heldAim.current = (heldAim.current ?? new THREE.Vector3())
+        .copy(lookTarget)
+        .sub(new THREE.Vector3(p.position[0], p.position[1], p.position[2]));
+    } else {
+      heldAim.current = null;
+    }
 
     // The camera is inherited from the fall, pointed straight down at the
     // ground, and the chase framing is nearly horizontal. Cutting between

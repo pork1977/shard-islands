@@ -15,6 +15,16 @@ export interface FlightInput {
   lookYaw: number;
   lookPitch: number;
   /**
+   * Mouse movement since the camera last read it, in pixels.
+   *
+   * Handed over as a PENDING delta rather than written straight into the
+   * offsets above, because the camera has to cancel the craft's rotation out
+   * of them first and then apply this. Written directly, the cancellation
+   * overwrote the drag every frame and the view could not be moved at all.
+   */
+  lookDeltaX: number;
+  lookDeltaY: number;
+  /**
    * A free-look drag is in progress.
    *
    * The offsets above are measured against the CRAFT, so they turn with it.
@@ -70,6 +80,8 @@ export function useFlightControls(): React.RefObject<FlightInput> {
     hover: false,
     lookYaw: 0,
     lookPitch: 0,
+    lookDeltaX: 0,
+    lookDeltaY: 0,
     freeLook: false,
     zoom: 1,
   });
@@ -108,6 +120,10 @@ export function useFlightControls(): React.RefObject<FlightInput> {
       drag.basePitch = input.current.lookPitch;
       // Mouse drags hold a view; touch drags steer, and must not.
       input.current.freeLook = !drag.steering;
+      // Anything that piled up while nothing was reading them — during the
+      // fall, say — is not a gesture anybody made.
+      input.current.lookDeltaX = 0;
+      input.current.lookDeltaY = 0;
     };
 
     const onPointerMove = (e: PointerEvent) => {
@@ -125,22 +141,10 @@ export function useFlightControls(): React.RefObject<FlightInput> {
         // every frame to cancel the craft's own rotation, and an absolute
         // "origin plus delta" would discard that correction on the next
         // mouse move — the view would jump back the moment you nudged it.
-        const stepX = e.clientX - drag.lastX;
-        const stepY = e.clientY - drag.lastY;
+        input.current.lookDeltaX += e.clientX - drag.lastX;
+        input.current.lookDeltaY += e.clientY - drag.lastY;
         drag.lastX = e.clientX;
         drag.lastY = e.clientY;
-
-        // Yaw is deliberately UNCLAMPED so the camera can swing the whole way
-        // round the craft; a limit near half a turn makes it feel like it has
-        // hit a wall just as you go to look behind you.
-        input.current.lookYaw -= stepX * 0.005;
-        // inverted: pushing the mouse up swings the camera up over the craft.
-        // pitch stays limited, or the camera tumbles over the top
-        input.current.lookPitch = clamp(
-          input.current.lookPitch + stepY * 0.004,
-          -1.15,
-          1.15,
-        );
       }
     };
 
