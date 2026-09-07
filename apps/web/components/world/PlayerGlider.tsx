@@ -68,8 +68,6 @@ export default function PlayerGlider() {
   const wornRef = useRef(-1);
   /** Where the boom pointed last frame, in world space, while a view is held. */
   const heldBoom = useRef<THREE.Vector3 | null>(null);
-  /** And the offset to what it is aimed at, for the same reason. */
-  const heldAim = useRef<THREE.Vector3 | null>(null);
   /** Last acknowledged input, so a snapshot is reconciled once, not per frame. */
   const lastAck = useRef(-1);
   /** Eased, so the downwash fades in and out rather than switching. */
@@ -260,39 +258,39 @@ export default function PlayerGlider() {
     zoomShown.current += (inp.zoom - zoomShown.current) * Math.min(1, dt * 6);
     const dist = 7.5 * zoomShown.current;
 
-    camTarget
-      .set(p.position[0], p.position[1], p.position[2])
-      .addScaledVector(boom, dist)
-      .addScaledVector(up, 2.3 * zoomShown.current);
-    /**
-     * What the camera is aimed AT, which has to be held too.
-     *
-     * Holding the boom fixes where the camera stands; it does not fix where
-     * it points. The aim sits nine metres ahead of the NOSE, so a craft
-     * turning under a held view still swung the aim with it — the view was
-     * pinned in position and quietly rotating anyway, which measured as
-     * about nine degrees of residual against fifty-eight uncorrected.
-     *
-     * So the offset from craft to aim point is remembered in world space and
-     * reused, exactly as the boom is. Both ends of the shot then translate
-     * with the craft and neither rotates with it.
-     */
-    if (inp.freeLook && heldAim.current) {
-      lookTarget
+    if (inp.freeLook) {
+      /**
+       * A TRUE orbit: same distance from the craft at every angle, craft
+       * dead centre.
+       *
+       * The chase framing offsets the camera along the craft's own up as
+       * well as along the boom, which is what puts the craft slightly low
+       * in frame and looks right when flying. It is wrong for an orbit,
+       * because that offset does not rotate with the boom — swing round to
+       * where the boom points down and the lift cancels most of it, the
+       * camera closes on the craft, and far enough round it ends up inside
+       * it and the craft vanishes. That is the arc Paul could feel and not
+       * name.
+       *
+       * The radius here is the length the chase framing would have had, so
+       * grabbing the mouse does not jump the camera in or out — it just
+       * stops the distance changing as you go round.
+       */
+      const radius = Math.hypot(dist, 2.3 * zoomShown.current);
+      camTarget
         .set(p.position[0], p.position[1], p.position[2])
-        .add(heldAim.current);
+        .addScaledVector(boom, radius);
+      // The craft itself, not a point ahead of its nose. Anything offset
+      // from the craft is a second centre for the orbit to swing around.
+      lookTarget.set(p.position[0], p.position[1], p.position[2]);
     } else {
+      camTarget
+        .set(p.position[0], p.position[1], p.position[2])
+        .addScaledVector(boom, dist)
+        .addScaledVector(up, 2.3 * zoomShown.current);
       lookTarget
         .set(p.position[0], p.position[1], p.position[2])
         .addScaledVector(forward, 9 * Math.max(0.15, Math.cos(ly)));
-    }
-
-    if (inp.freeLook) {
-      heldAim.current = (heldAim.current ?? new THREE.Vector3())
-        .copy(lookTarget)
-        .sub(new THREE.Vector3(p.position[0], p.position[1], p.position[2]));
-    } else {
-      heldAim.current = null;
     }
 
     // The camera is inherited from the fall, pointed straight down at the

@@ -75,7 +75,7 @@ export const FLIGHT_ALTITUDE = TERRAIN_BASE_Z + TERRAIN_MAX_HEIGHT + 95;
  * The two landmark regions are placed by hand, not found by a search.
  *
  * One large desert and one huge lake are composition decisions: they have to
- * sit far apart, well inside the flight boundary (TERRAIN_SIZE * 0.44), and
+ * sit far apart, well inside the flight boundary (see BOUNDARY_HARD), and
  * clear of the middle where the player lands. A search over noise gets the
  * geology right and the composition wrong, so these are coordinates.
  */

@@ -18,9 +18,23 @@ import {
  * integration has to be shared too.
  */
 
-/** Where the world starts turning you back, and where it refuses outright. */
-export const BOUNDARY_SOFT = TERRAIN_SIZE * 0.34;
-export const BOUNDARY_HARD = TERRAIN_SIZE * 0.44;
+/**
+ * Where the world starts turning you back, and where it refuses outright.
+ *
+ * Both moved outward. The soft edge sat at 0.34 of the terrain — 952 metres
+ * of a map that is drawn to 1400 — so a third of the visible world was
+ * scenery you were steered away from before reaching. Worse, cores are
+ * seeded out to 0.4 (1120m), which put the outermost ones INSIDE the
+ * turn-back band: reachable in principle, and in practice the game fought
+ * you the whole way there.
+ *
+ * The soft edge now sits beyond the furthest core, so every collectable is
+ * in free airspace, and the hard edge sits close enough to the rim to make
+ * the map feel like the size it looks. The cost is that the edge of the
+ * world is now somewhere you can actually get to and see.
+ */
+export const BOUNDARY_SOFT = TERRAIN_SIZE * 0.42;
+export const BOUNDARY_HARD = TERRAIN_SIZE * 0.47;
 /** Enough headroom to climb without leaving the world behind. */
 export const CEILING = FLIGHT_ALTITUDE + 120;
 /** How far the craft floats above the ground it is skimming. */
