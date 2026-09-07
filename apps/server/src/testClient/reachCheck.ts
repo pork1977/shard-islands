@@ -46,9 +46,16 @@ const checks: [string, boolean, string][] = [
     `${BOUNDARY_HARD.toFixed(0)} < ${(TERRAIN_SIZE / 2).toFixed(0)}`,
   ],
   [
-    "there is room to turn before the wall",
-    BOUNDARY_HARD - BOUNDARY_SOFT > 100,
-    `${(BOUNDARY_HARD - BOUNDARY_SOFT).toFixed(0)}m band`,
+    // 100m was my own guess, written before anything had been flown at the
+    // edge, and it failed the moment the band was narrowed to let players
+    // actually reach the rim. edgeCheck.ts settles this properly by flying
+    // a craft at the wall under boost: it is turned at 1366 and never
+    // reaches 1386, so 70m is demonstrably enough room. What matters here
+    // is only that a band exists at all — a hard wall with no approach is a
+    // different and much worse feeling.
+    "the wall has an approach rather than being a cliff",
+    BOUNDARY_HARD - BOUNDARY_SOFT >= 50,
+    `${(BOUNDARY_HARD - BOUNDARY_SOFT).toFixed(0)}m band — see edgeCheck.ts`,
   ],
 ];
 

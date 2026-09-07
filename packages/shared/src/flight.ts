@@ -36,8 +36,20 @@ import {
  * follows the shape of the ground, so the rim is the same distance away
  * whichever way you fly at it.
  */
-export const BOUNDARY_SOFT = TERRAIN_SIZE * 0.44;
-export const BOUNDARY_HARD = TERRAIN_SIZE * 0.477;
+export const BOUNDARY_SOFT = TERRAIN_SIZE * 0.47;
+export const BOUNDARY_HARD = TERRAIN_SIZE * 0.495;
+
+/**
+ * How hard the soft edge turns you, in radians per second at full strength.
+ *
+ * This, not the wall, is what a player actually meets. Flown at it under
+ * boost, a craft used to stop gaining ground at 1287 of a possible 1336 —
+ * the turn was strong enough and started early enough that the hard
+ * boundary was unreachable, so widening the hard boundary changed nothing
+ * anybody could feel. Measured by edgeCheck.ts rather than reasoned about,
+ * after two goes at this that were sound on paper and wrong in the air.
+ */
+export const BOUNDARY_TURN_RATE = 1.5;
 /** Enough headroom to climb without leaving the world behind. */
 export const CEILING = FLIGHT_ALTITUDE + 120;
 /** How far the craft floats above the ground it is skimming. */
@@ -301,7 +313,7 @@ export function stepFlight(s: FlightSim, input: FlightInput, dt: number): void {
     let delta = inward - s.yaw;
     while (delta > Math.PI) delta -= Math.PI * 2;
     while (delta < -Math.PI) delta += Math.PI * 2;
-    s.yaw += delta * over * dt * 1.9;
+    s.yaw += delta * over * dt * BOUNDARY_TURN_RATE;
 
     // and a hard stop at the very edge, in case they fight it the whole way
     if (distFromCentre > BOUNDARY_HARD) {

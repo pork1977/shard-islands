@@ -71,10 +71,8 @@ export default function PlayerGlider() {
   const heldBoom = useRef<THREE.Vector3 | null>(null);
   /** Distance the orbit was taken hold of at, kept constant all the way round. */
   const orbitRadius = useRef(7.5);
-  /** Where the camera was aimed when the view was grabbed, and how far it has
-   *  since eased onto the craft. */
+  /** Offset from craft to the point the orbit turns about, held for the drag. */
   const aimOffset = useRef<THREE.Vector3 | null>(null);
-  const aimEase = useRef(0);
   /** Last acknowledged input, so a snapshot is reconciled once, not per frame. */
   const lastAck = useRef(-1);
   /** Eased, so the downwash fades in and out rather than switching. */
@@ -223,13 +221,19 @@ export default function PlayerGlider() {
      */
     if (inp.freeLook && !heldBoom.current) {
       craftPos.set(p.position[0], p.position[1], p.position[2]);
-      const offset = new THREE.Vector3().copy(state.camera.position).sub(craftPos);
+      // The orbit turns about WHAT THE CAMERA IS LOOKING AT, and the offset
+      // from the craft to that point is then held for the whole drag.
+      //
+      // Orbiting about the craft instead meant the aim had to move from
+      // where it was — nine metres ahead of the nose — onto the craft, and
+      // easing that over half a second was still a shove: the plane slid
+      // forward as the aim slid back. Nothing needs to move at all. Turn
+      // about the point already at the centre of the screen and the thing
+      // at the centre of the screen stays there.
+      aimOffset.current = new THREE.Vector3().copy(lookAt).sub(craftPos);
+      const offset = new THREE.Vector3().copy(state.camera.position).sub(lookAt);
       orbitRadius.current = Math.max(0.5, offset.length());
       heldBoom.current = offset.normalize();
-      // Where it is pointed right now, which then eases onto the craft
-      // rather than snapping there.
-      aimOffset.current = new THREE.Vector3().copy(lookAt).sub(craftPos);
-      aimEase.current = 0;
     }
 
     if (inp.freeLook && heldBoom.current) {
@@ -281,7 +285,6 @@ export default function PlayerGlider() {
     } else {
       heldBoom.current = null;
       aimOffset.current = null;
-      aimEase.current = 0;
     }
 
     // wheel zoom, eased so a flick of the wheel does not snap the camera
@@ -306,20 +309,11 @@ export default function PlayerGlider() {
        * grabbing the mouse does not jump the camera in or out — it just
        * stops the distance changing as you go round.
        */
-      camTarget
-        .set(p.position[0], p.position[1], p.position[2])
-        .addScaledVector(boom, orbitRadius.current);
-
-      // The aim settles ONTO the craft over half a second rather than
-      // arriving there. Anything offset from the craft is a second centre
-      // for the orbit to swing around, so it has to end up centred — but
-      // moving it there in one frame is the hop this was meant to remove.
-      aimEase.current = Math.min(1, aimEase.current + dt / 0.5);
-      const ease = aimEase.current * aimEase.current * (3 - 2 * aimEase.current);
+      // The centre of the orbit travels with the craft but does not rotate
+      // with it, so a turn moves neither the camera nor the aim.
       lookTarget.set(p.position[0], p.position[1], p.position[2]);
-      if (aimOffset.current) {
-        lookTarget.addScaledVector(aimOffset.current, 1 - ease);
-      }
+      if (aimOffset.current) lookTarget.add(aimOffset.current);
+      camTarget.copy(lookTarget).addScaledVector(boom, orbitRadius.current);
     } else {
       camTarget
         .set(p.position[0], p.position[1], p.position[2])
