@@ -66,6 +66,8 @@ export default function PlayerGlider() {
   const zoomShown = useRef(1);
   /** Rare form currently applied, so the uniforms are set on change only. */
   const wornRef = useRef(-1);
+  /** Craft heading last frame, to cancel it out of a held view. */
+  const lastCraftYaw = useRef<number | null>(null);
   /** Last acknowledged input, so a snapshot is reconciled once, not per frame. */
   const lastAck = useRef(-1);
   /** Eased, so the downwash fades in and out rather than switching. */
@@ -187,6 +189,27 @@ export default function PlayerGlider() {
     // and makes flight feel jittery instead of cinematic.
     // Free-look orbits the camera about the craft without touching where it
     // is heading — the boom swings round, the flight path does not change.
+    /**
+     * Hold the view still while the craft turns under it.
+     *
+     * lookYaw is an offset from the craft's own heading, so the boom's world
+     * direction works out to (craftYaw - lookYaw). Left alone, steering
+     * during a free-look drags the whole view round with the nose — which is
+     * exactly what you do NOT want when you are holding the camera on
+     * something and turning to line up on it.
+     *
+     * Cancelling it is therefore one subtraction: add the craft's own change
+     * in heading to the offset, and the difference — the direction the
+     * camera is actually pointed — stays put.
+     */
+    if (inp.freeLook && lastCraftYaw.current !== null) {
+      let d = p.yaw - lastCraftYaw.current;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      inp.lookYaw += d;
+    }
+    lastCraftYaw.current = p.yaw;
+
     const ly = inp.lookYaw;
     const lp = inp.lookPitch;
     const cosP = Math.cos(lp);

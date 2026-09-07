@@ -14,6 +14,17 @@ export interface FlightInput {
   /** Camera orbit offsets in radians — look around WITHOUT steering. */
   lookYaw: number;
   lookPitch: number;
+  /**
+   * A free-look drag is in progress.
+   *
+   * The offsets above are measured against the CRAFT, so they turn with it.
+   * That is right when the camera is simply sitting behind the craft, and
+   * wrong while somebody is holding a view: they have pointed the camera at
+   * something in the world, and steering should turn the craft underneath
+   * it rather than drag the whole view along. The camera compensates for
+   * the craft's own rotation while this is set.
+   */
+  freeLook: boolean;
   /** Chase-camera distance multiplier, driven by the wheel. */
   zoom: number;
 }
@@ -59,6 +70,7 @@ export function useFlightControls(): React.RefObject<FlightInput> {
     hover: false,
     lookYaw: 0,
     lookPitch: 0,
+    freeLook: false,
     zoom: 1,
   });
 
@@ -90,6 +102,8 @@ export function useFlightControls(): React.RefObject<FlightInput> {
       drag.originY = e.clientY;
       drag.baseYaw = input.current.lookYaw;
       drag.basePitch = input.current.lookPitch;
+      // Mouse drags hold a view; touch drags steer, and must not.
+      input.current.freeLook = !drag.steering;
     };
 
     const onPointerMove = (e: PointerEvent) => {
@@ -119,6 +133,7 @@ export function useFlightControls(): React.RefObject<FlightInput> {
       }
       drag.active = false;
       drag.steering = false;
+      input.current.freeLook = false;
     };
 
     /** When each steering key was last pressed, for the double tap. */
