@@ -162,16 +162,22 @@ interface ShardTiming {
  *
  * Measured, not guessed. Every room ticks on the same Node event loop and
  * Node has one thread, so the cost is machine-wide however the players are
- * distributed. Against production on a performance-1x machine:
+ * distributed. Against production, on the two machines it has run on:
  *
- *     24 craft  20.00 Hz      ~64 craft  16.37 Hz
- *     48 craft  18.12 Hz      ~88 craft   9.49 Hz
- *     96 craft   8.83 Hz
+ *                   shared-cpu-1x     performance-1x
+ *     24 craft        19.86 Hz          20.00 Hz
+ *     48 craft    14.7-17.3 Hz          18.12 Hz
+ *    ~64 craft          —               16.37 Hz
+ *     96 craft        6.1-7.8 Hz         8.83 Hz
  *
- * Gradual to about sixty-four, then a cliff. Sixty-four still holds better
- * than 16Hz, which is the rate this game was developed at for weeks — the
- * room measures its own tick length so the physics is right either way —
- * and below about twelve the interpolation starts to show.
+ * It runs on shared-cpu-1x, capped at 48. The spread at 48 is real and has
+ * a cause: 17.3Hz was 48 craft over three rooms, 14.7Hz was 48 packed into
+ * two, and a fuller room costs more because every craft is checked against
+ * every other craft's trail. 14.7Hz is under the 16Hz this game was
+ * developed at for weeks but over the ~12Hz where the interpolation starts
+ * to show — playable, not comfortable. The room measures its own tick
+ * length, so the physics stays right either way. On performance-1x the
+ * same reasoning allows 64.
  *
  * Past the cliff nobody wins: the tick is too slow to play on AND clients
  * begin dropping out, so an uncapped machine turns one enthusiastic day
@@ -186,7 +192,7 @@ interface ShardTiming {
  * Override with MAX_CONCURRENT after re-running roomLoadCheck against
  * whatever the machine is at the time.
  */
-const CAPACITY = Number(process.env.MAX_CONCURRENT ?? 0) || 64;
+const CAPACITY = Number(process.env.MAX_CONCURRENT ?? 0) || 48;
 
 export class ShardIslandsRoom extends Room<RoomState> {
   maxClients = ROOM.maxPlayers;

@@ -29,7 +29,16 @@ primary_region = "iad"
   # than everyone's tick rate collapsing. Re-run roomLoadCheck after any
   # change to the machine or to the physics, and set this from the number
   # it gives rather than from optimism.
-  MAX_CONCURRENT = "64"
+  #
+  # 48 on shared-cpu-1x. Measured the day it went back on that machine: the
+  # gate turned arrivals away at exactly 48, and 48 craft packed into two
+  # rooms ran at 14.7 Hz. That is below the 16 Hz the game was developed at
+  # but above the ~12 Hz where movement starts to look choppy, so playable
+  # rather than comfortable. A week earlier the same load spread over three
+  # rooms ran at 17.3 Hz; fuller rooms cost more because every craft checks
+  # every other craft's trail. It was 64 on performance-1x. Change the two
+  # together.
+  MAX_CONCURRENT = "48"
   # ALLOWED_ORIGINS is deliberately NOT here. It is set with `fly secrets
   # set`, so that changing where the game is served from does not require a
   # code change, and so an unset value is visible as a warning in the logs
@@ -83,12 +92,18 @@ primary_region = "iad"
   # next deploy — which, on a launch day, is the worst possible moment to
   # find out.
   #
-  # performance-1x is a DEDICATED core; shared-cpu-Nx gives more cores that
-  # a single-threaded Node process cannot use, and Fly throttles shared CPU
-  # to a fraction of a core once its burst balance is spent. Worth knowing:
-  # measured against production, the dedicated core bought far less than
-  # expected (17.32 → 18.12 Hz at 48 craft, and the collapse point barely
-  # moved), because the ceiling is the cost of the physics rather than the
-  # hardware. See MAX_CONCURRENT below and roomLoadCheck.ts.
-  size = "performance-1x"
-  memory = "2048mb"
+  # Back on the small shared machine, deliberately.
+  #
+  # It spent a week on performance-1x (a dedicated core, 2GB) in case a
+  # Product Hunt launch brought a crowd. That machine bills for being
+  # switched on, not for players, and it came to about $1 a day on a site
+  # almost nobody was using yet. It also bought very little: measured
+  # against production, 17.32 -> 18.12 Hz at 48 craft, with the collapse
+  # point unmoved, because the ceiling is the cost of the physics rather
+  # than the hardware. The server used around 168MB of its 2GB.
+  #
+  # FOR A LAUNCH: scale up the day before, then change BOTH of these lines
+  # and MAX_CONCURRENT above to match, or the next deploy puts it back.
+  #   fly scale vm performance-1x --vm-memory 2048 -a shard-islands
+  size = "shared-cpu-1x"
+  memory = "512mb"
