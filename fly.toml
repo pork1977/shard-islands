@@ -47,13 +47,32 @@ primary_region = "iad"
 [http_service]
   internal_port = 2567
   force_https = true
-  # A game server holds every player's socket open. Stopping the machine
-  # when it looks idle would disconnect anybody mid-flight and add a cold
-  # start to the next arrival — and "no visible connecting delay, ever" is
-  # the one constraint this project is not allowed to break.
-  auto_stop_machines = false
+  # The machine sleeps when the sky is empty and wakes on the first arrival.
+  #
+  # This used to be off, on the grounds that a cold start would break "no
+  # visible connecting delay, ever". That reasoning was wrong, and the
+  # timeline is why: beginJoin() fires the moment the pane is struck, and
+  # the player is not flying until PLUNGE_AT + PLUNGE_DURATION, which is
+  # 15.8 seconds later. Nothing in the client blocks on, awaits or gates the
+  # sequence behind the join. A resume is a few hundred milliseconds and a
+  # full cold boot is a couple of seconds, so both land during the fall,
+  # with seconds to spare, and the player sees nothing.
+  #
+  # "suspend" rather than "stop": it keeps the memory image, so waking is a
+  # resume rather than a boot. Fly bills them the same. Fly can still fall
+  # back to a cold boot after a deploy, a host migration or capacity
+  # pressure, which is fine — the fall covers that too, and it is the case
+  # worth testing after any change here.
+  #
+  # Open sockets count as live traffic, so nobody is ever disconnected
+  # mid-flight; the machine only sleeps once the last player has left.
+  auto_stop_machines = "suspend"
+  # Explicit, and it has to stay explicit: autostart has been reported not
+  # to fire without it alongside a suspend setting.
   auto_start_machines = true
-  min_machines_running = 1
+  # THE LINE THAT DOES THE WORK. At 1, autostop never stops the last
+  # machine and the setting above achieves nothing at all.
+  min_machines_running = 0
 
   # EXACTLY ONE MACHINE. Not a cost decision — a correctness one.
   #

@@ -17,13 +17,27 @@ what this game needs is small:
 | | |
 |---|---|
 | `shared-cpu-1x`, 512MB, running continuously | ~$3.30/month |
+| the same machine, asleep | no CPU or RAM billed |
 | Bandwidth, North America / Europe | $0.02/GB |
 | A full room of 24 players | ~1.4 GB/hour, so ~$0.03/hour |
 
-A quiet month is a few pounds. A Product Hunt day with a hundred concurrent
-players for twelve hours adds something like a pound of bandwidth on top.
-Check <https://fly.io/docs/about/pricing/> before committing — that page is
-the only authority and it changes.
+**The machine sleeps when nobody is flying.** `fly.toml` sets
+`auto_stop_machines = "suspend"` with `min_machines_running = 0`, so an
+empty sky costs close to nothing and the fixed monthly figure above is the
+worst case rather than the bill. A month with no players is pennies; a month
+with a steady crowd approaches the $3.30. See the long note in `fly.toml`
+for why a wake-up is invisible to the player.
+
+A Product Hunt day with a hundred concurrent players for twelve hours adds
+something like a pound of bandwidth on top. Check
+<https://fly.io/docs/about/pricing/> before committing — that page is the
+only authority and it changes.
+
+**Do not point an uptime monitor at `/health` while the machine is allowed
+to sleep.** Every poll is traffic, so a monitor on a five-minute interval
+keeps it awake permanently and quietly puts the bill back to the fixed
+figure. If you want to know the server is healthy, check it when you care
+rather than every five minutes.
 
 **A Vercel account.** The free Hobby tier covers this frontend.
 
@@ -259,7 +273,28 @@ fly status                    # machine state and health
 fly machine list
 ```
 
+A machine reported as `suspended` or `stopped` is the normal resting state,
+not an outage — see the sleep note at the top. `fly status` while it sleeps
+shows no health check result at all, because nothing is running to check.
+
+To take the server off the bill entirely, rather than just letting it sleep:
+
+```bash
+fly scale count 0 -a shard-islands     # off
+fly scale count 1 -a shard-islands     # back
+```
+
+The site still loads and still flies at zero, because a failed join is
+silent by design. It is simply a permanently single-player game, with no
+sign to the player that it was ever anything else.
+
 `/health` reports uptime, live room count, connected players, and whether
-the origin lock is on. It is a plain JSON endpoint, so anything that can
-poll a URL — a free uptime monitor will do — can watch it and tell you
-before a player does.
+the origin lock is on. It is a plain JSON endpoint, so `curl` it whenever
+you want to know the server is well — and note that curling it WAKES the
+machine, which is exactly why it must not be polled on a schedule. There
+was a recommendation here to put a free uptime monitor on it. That advice
+is withdrawn: now that the machine is allowed to sleep, a monitor on a
+five-minute interval would keep it awake around the clock and put the
+fixed monthly cost straight back, which is the one thing the sleep setting
+exists to avoid. Checking by hand when you care is the trade this project
+has chosen.
