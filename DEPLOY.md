@@ -1,5 +1,35 @@
 # Deploying Shard Islands
 
+> ## THE REALTIME SERVER IS OFF (since 2026-11-17)
+>
+> `fly scale count 0` — the Fly machine is **destroyed**, not asleep. The app
+> shell still exists, holds its IPs and its config, and bills nothing at all.
+>
+> This was deliberate. The game had no players for a couple of months, it was
+> only ever a demo, and Paul did not want a machine quietly billing for months
+> more against a site nobody visits. **Sleep mode was built first and works**
+> (see the note further down) — it was rejected only because "pennies a month,
+> forever, unwatched" was still the wrong answer for something with no users.
+>
+> **The site is completely unaffected and still plays.** Vercel is free and
+> untouched. A visitor strikes the pane, falls, and flies — alone, silently,
+> with no banner, no spinner and no broken retry button, because a failed join
+> renders no UI at all. Verified against the live site with the server off.
+>
+> **It is one command to bring back, and it comes back asleep:**
+>
+> ```bash
+> fly scale count 1 -a shard-islands
+> ```
+>
+> `fly.toml` still carries the sleep config, so a restored machine suspends
+> itself after ~7 minutes empty rather than billing around the clock. If the
+> image has aged out, `fly deploy` instead.
+>
+> **Do not "fix" this.** An app reporting `suspended` with no machines is the
+> intended resting state. Check with Paul before starting it.
+
+
 Two halves, deployed separately: the **frontend** (`apps/web`) on Vercel, and
 the **realtime server** (`apps/server`) on Fly.io.
 
