@@ -16,15 +16,35 @@
 > with no banner, no spinner and no broken retry button, because a failed join
 > renders no UI at all. Verified against the live site with the server off.
 >
-> **It is one command to bring back, and it comes back asleep:**
+> **To bring it back — and it comes back asleep, not always-on:**
 >
 > ```bash
-> fly scale count 1 -a shard-islands
+> fly scale count 1 -r iad -a shard-islands
 > ```
 >
-> `fly.toml` still carries the sleep config, so a restored machine suspends
-> itself after ~7 minutes empty rather than billing around the clock. If the
-> image has aged out, `fly deploy` instead.
+> **`-r iad` is not optional from zero.** `scale count` defaults to "all
+> regions where there is at least one machine running", and with no machines
+> that set is empty, so the bare command has no region to act on.
+>
+> If the image has aged out of the registry, deploy instead — **with
+> `--ha=false`**:
+>
+> ```bash
+> fly deploy --ha=false -a shard-islands
+> ```
+>
+> `fly deploy` defaults to `--ha=true` and on a zero-machine app that creates
+> **two** machines. Two machines is the two-worlds bug described under
+> EXACTLY ONE MACHINE in `fly.toml`: both healthy, both passing checks, and
+> players silently split across two separate skies. Always confirm after:
+>
+> ```bash
+> fly status                    # exactly one machine, not two
+> ```
+>
+> `fly.toml` still carries the sleep config, so whichever route you take the
+> restored machine suspends itself after ~7 minutes empty rather than billing
+> around the clock.
 >
 > **Do not "fix" this.** An app reporting `suspended` with no machines is the
 > intended resting state. Check with Paul before starting it.
@@ -72,8 +92,13 @@ rather than every five minutes.
 **A Vercel account.** The free Hobby tier covers this frontend.
 
 **A GitHub repository.** Already done — <https://github.com/pork1977/shard-islands>,
-private. Both Fly and Vercel deploy from it, and both redeploy on a push to
-`master`.
+private. **Vercel** redeploys on a push to `master`. **Fly does not** — there is
+no GitHub integration on this app and never was. Every release has come from
+`fly deploy` on someone's machine, which was verified in November 2026 by
+pushing twice and watching the release number stay put. So a push changes the
+site and leaves the server exactly as it is, which is the only reason the
+scale-to-zero above is durable. If you ever connect the Fly dashboard's GitHub
+integration, that stops being true and a push would rebuild the machine.
 
 ---
 

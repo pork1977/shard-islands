@@ -11,10 +11,21 @@ app = "shard-islands"
 # THE MACHINE IS SCALED TO ZERO AND THIS FILE IS NOT RUNNING ANYWHERE.
 #
 # Turned off on 2026-11-17: no players for months, a demo nobody was
-# visiting, and no reason to keep billing for it. `fly scale count 1`
-# brings it back, and the sleep settings below mean it comes back asleep
-# rather than always-on. Everything here is still correct and still what a
-# restored machine would run. See the banner at the top of DEPLOY.md.
+# visiting, and no reason to keep billing for it. Everything here is still
+# correct and still what a restored machine would run, and the sleep
+# settings below mean it comes back ASLEEP rather than always-on.
+#
+# To bring it back:
+#   fly scale count 1 -r iad -a shard-islands
+#
+# The region is required from zero: scale count defaults to the regions
+# that already have a machine, and there are none. If the image has aged
+# out, use `fly deploy --ha=false` instead and NOT a bare `fly deploy` —
+# it defaults to --ha=true, which on a zero-machine app creates TWO
+# machines, which is the exact failure described under EXACTLY ONE
+# MACHINE below. Check `fly status` afterwards either way.
+#
+# See the banner at the top of DEPLOY.md.
 
 # US East. A Colyseus room lives in ONE process on ONE machine, so a second
 # region would be a second WORLD, not a faster route to this one — players
