@@ -12,9 +12,17 @@
 > forever, unwatched" was still the wrong answer for something with no users.
 >
 > **The site is completely unaffected and still plays.** Vercel is free and
-> untouched. A visitor strikes the pane, falls, and flies — alone, silently,
-> with no banner, no spinner and no broken retry button, because a failed join
-> renders no UI at all. Verified against the live site with the server off.
+> untouched. A visitor strikes the pane, falls, and flies, alone. Since the
+> page calls itself a multiplayer game, they are now told why: a quiet line
+> at the bottom left reading **"multiplayer temporarily disabled / the sky is
+> yours alone for now"**, in the same place and the same voice as the
+> existing "flying solo" notice. It doubles as the reminder that this is
+> switched off at all.
+>
+> That notice is `MULTIPLAYER_OFF` in `apps/web/lib/serverStatus.ts`. It is a
+> flag and **not** inferred from a failed connection, because the two are
+> identical to the client and a player whose own wifi dropped should not be
+> told a feature was disabled.
 >
 > **To bring it back — and it comes back asleep, not always-on:**
 >
@@ -45,6 +53,13 @@
 > `fly.toml` still carries the sleep config, so whichever route you take the
 > restored machine suspends itself after ~7 minutes empty rather than billing
 > around the clock.
+>
+> **Then set `MULTIPLAYER_OFF` to `false` in `apps/web/lib/serverStatus.ts`
+> and push**, so the notice stops claiming something that is no longer true.
+> Forgetting this is not serious: the notice only shows while the client is
+> NOT connected, so a working server takes a stale notice off the screen by
+> itself. Verified by running a server locally with the flag still `true`,
+> which joined in 394ms and showed nothing.
 >
 > **Do not "fix" this.** An app reporting `suspended` with no machines is the
 > intended resting state. Check with Paul before starting it.
